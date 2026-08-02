@@ -8,6 +8,11 @@ media controls or mouse actions. Bindings are stored on the device, so they
 follow it to any computer, and they are changed over USB without reflashing and
 without installing a driver.
 
+This already works and can be used day to day, but it is still early and needs
+polish. International layout handling, the configurator UX and support for other
+board variants all have rough edges. Treat it as a solid starting point rather
+than a finished product; improvements and pull requests are very welcome.
+
 ![The macropad board](docs/img/board-front.jpg)
 
 ## Why this exists
@@ -84,6 +89,8 @@ and the knobs handle volume and media playback.
 
 Reflashing later needs no jumper or disassembly: the configurator has a button
 that reboots the pad into its bootloader.
+
+![The browser configurator](docs/img/webgui.png)
 
 ## Documentation
 
