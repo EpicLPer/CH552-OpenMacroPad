@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Macropad configurator</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header>
+  <h1>Macropad configurator</h1>
+  <div id="device" class="device">Connecting...</div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>Keys</h2>
+    <div id="keys" class="grid"></div>
+
+    <h2>Knobs</h2>
+    <div id="knobs" class="knobs"></div>
+  </section>
+
+  <section class="panel editor">
+    <h2 id="editing">Select a key</h2>
+
+    <div id="editor" hidden>
+      <div class="tabs" id="tabs">
+        <button data-kind="key" class="active">Keyboard</button>
+        <button data-kind="con">Media &amp; apps</button>
+        <button data-kind="mouse">Mouse</button>
+        <button data-kind="none">Unbound</button>
+      </div>
+
+      <div class="pane" data-kind="key">
+        <label>Modifiers</label>
+        <div id="mods" class="mods"></div>
+        <label for="keySelect">Key</label>
+        <select id="keySelect"></select>
+
+        <div id="rawRow" hidden>
+          <label for="rawUsage">HID usage number</label>
+          <input id="rawUsage" type="number" min="1" max="119" value="52">
+          <p class="hint">
+            Sends a key position directly, for anything without a name here.
+            Usage 52 is the key a US layout calls apostrophe, which a German
+            layout uses for &auml;.
+          </p>
+        </div>
+
+        <button id="capture" class="ghost">Capture a keypress</button>
+        <p class="hint">
+          The pad sends key <em>positions</em>, not characters, so what actually
+          gets typed depends on the keyboard layout the host is set to.
+        </p>
+        <p class="hint">
+          Windows handles some chords itself and will not pass them on, the
+          Windows key especially. Tick the modifiers by hand for those.
+        </p>
+      </div>
+
+      <div class="pane" data-kind="con" hidden>
+        <label for="conSelect">Action</label>
+        <select id="conSelect"></select>
+        <p class="hint">
+          Standard consumer controls. No driver or background software is
+          needed; the desktop acts on these directly.
+        </p>
+      </div>
+
+      <div class="pane" data-kind="mouse" hidden>
+        <label for="mouseSelect">Action</label>
+        <select id="mouseSelect"></select>
+        <div id="stepsRow" hidden>
+          <label for="steps">Steps per press</label>
+          <input id="steps" type="number" min="1" max="127" value="1">
+        </div>
+      </div>
+
+      <div class="pane" data-kind="none" hidden>
+        <p class="hint">This slot will do nothing at all.</p>
+      </div>
+
+      <div class="preview">Sends: <strong id="preview">-</strong></div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <button id="apply" class="primary" disabled>Apply to pad</button>
+  <button id="revert" disabled>Discard changes</button>
+  <button id="reload">Reload from pad</button>
+  <span class="spacer"></span>
+  <button id="save">Save profile</button>
+  <button id="load">Load profile</button>
+  <button id="defaults" class="danger">Restore defaults</button>
+  <button id="boot" class="danger">Reboot to bootloader</button>
+  <input id="file" type="file" accept="application/json" hidden>
+</footer>
+
+<div id="status" class="status"></div>
+
+<script src="app.js"></script>
+</body>
+</html>

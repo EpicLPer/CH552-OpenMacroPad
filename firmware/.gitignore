@@ -1,0 +1,14 @@
+build/
+.toolshim/
+vendor/
+
+# Build artefacts land next to the source. The ready-to-flash release binary
+# under prebuilt/ is deliberately tracked so the pad can be flashed without a
+# compiler.
+/*.bin
+/*.hex
+/*.ihx
+/*.lk
+/*.map
+/*.mem
+/*.rel

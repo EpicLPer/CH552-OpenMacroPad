@@ -1,0 +1,53 @@
+name: Hardware report
+description: Report a macropad this firmware was tried on, whether it worked or not
+labels: [hardware-support]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        This firmware has only ever been tested on one physical unit, so reports
+        from other hardware are genuinely useful, including the ones that failed.
+        Please do not feel you need a fix to be worth reporting.
+  - type: input
+    id: silkscreen
+    attributes:
+      label: Board marking
+      description: The silkscreen text on the PCB, if there is any.
+      placeholder: SY181P2R03003A 12+3
+  - type: input
+    id: layout
+    attributes:
+      label: Keys and knobs
+      placeholder: 12 keys, 2 rotary encoders
+    validations:
+      required: true
+  - type: input
+    id: chips
+    attributes:
+      label: Chip markings
+      description: The two main ICs, U1 and U2.
+      placeholder: CH552G and TM1650
+  - type: dropdown
+    id: result
+    attributes:
+      label: What happened?
+      options:
+        - Everything worked
+        - Flashed and ran, but some keys or knobs were wrong
+        - Flashed, but the pad did nothing
+        - Could not flash it
+    validations:
+      required: true
+  - type: textarea
+    id: discovery
+    attributes:
+      label: Discovery firmware output
+      description: >
+        If you got as far as running it, the output of discovery.c, with a note
+        of which physical key or knob produced each line. See docs/HARDWARE.md.
+      render: text
+  - type: textarea
+    id: detail
+    attributes:
+      label: Anything else
+      description: Errors, photographs of the board, what you expected instead.

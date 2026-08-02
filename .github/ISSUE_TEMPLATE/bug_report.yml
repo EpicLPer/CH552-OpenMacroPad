@@ -1,0 +1,39 @@
+name: Bug report
+description: Something does not work as documented
+labels: [bug]
+body:
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware version
+      description: From `python tools/padconf.py show`, or the top of the configurator.
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system and keyboard layout
+      description: >
+        The layout matters more than you might expect. A keyboard sends key
+        positions, not characters, so the layout decides what a binding types.
+      placeholder: Windows 11, German (QWERTZ)
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected instead
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: How to reproduce it
+      description: The binding involved, and the exact commands if you used the command line.
+      render: text
+  - type: textarea
+    id: output
+    attributes:
+      label: Any error output
+      render: text

@@ -1,0 +1,33 @@
+# Build output
+firmware/build/
+firmware/.toolshim/
+firmware/*.hex
+firmware/*.bin
+firmware/*.ihx
+firmware/*.lk
+firmware/*.map
+firmware/*.mem
+firmware/*.rel
+
+# The prebuilt release binary is deliberately tracked, so that the pad can be
+# flashed without installing a compiler. Undo the blanket rule above for it.
+!firmware/prebuilt/*.bin
+!firmware/prebuilt/*.hex
+
+# Upstream projects cloned for reference only, never built
+firmware/vendor/
+
+# Tooling for the stock firmware. That was a separate effort against the
+# factory BLOB protocol and is not part of this project.
+windows/
+_local_padclaude/
+
+# Full-resolution reverse-engineering photos. docs/img holds the scaled copies
+# that are actually published.
+wiring_photos/
+
+__pycache__/
+*.pyc
+.venv/
+.DS_Store
+Thumbs.db
