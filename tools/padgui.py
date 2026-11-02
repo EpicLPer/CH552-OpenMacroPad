@@ -14,9 +14,11 @@ from __future__ import annotations
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+import layouts
 import padlib
 from padlib import (Action, Pad, PadError, SLOTS, SLOT_LABELS,
-                    ACT_NONE, ACT_KEY, ACT_CON, ACT_MOUSE)
+                    ACT_NONE, ACT_KEY, ACT_CON, ACT_MOUSE, capture_from_event,
+                    split_binding)
 
 # The twelve keys as they sit on the board.
 GRID_COLS = 4
@@ -26,19 +28,12 @@ KNOB_SLOTS = ["top-ccw", "top-press", "top-cw", "bot-ccw", "bot-press", "bot-cw"
 
 NAMED_KEYS = sorted(k for k in padlib.KEYS if len(k) > 1)
 CHAR_KEYS = [k for k in padlib.KEYS if len(k) == 1]
-ALL_KEYS = NAMED_KEYS + CHAR_KEYS
+ALL_KEYS = NAMED_KEYS + CHAR_KEYS + list(padlib.EXTRA_CHARS)
 
 MOUSE_CHOICES = list(padlib.MOUSE_BUTTONS) + list(padlib.MOUSE_DELTAS)
 
-# tkinter keysyms do not match our names everywhere, so translate the ones that
-# differ. Anything not listed is used as-is once lowercased.
-KEYSYM_MAP = {
-    "Return": "enter", "Escape": "esc", "BackSpace": "backspace",
-    "Tab": "tab", "space": "space", "Prior": "pageup", "Next": "pagedown",
-    "Insert": "insert", "Delete": "delete", "Home": "home", "End": "end",
-    "Up": "up", "Down": "down", "Left": "left", "Right": "right",
-    "Caps_Lock": "capslock",
-}
+# Tk keysyms that are not already the binding name. capture_from_event does
+# the rest, including characters that depend on the host layout.
 
 
 class App(ttk.Frame):
@@ -100,6 +95,22 @@ class App(ttk.Frame):
         ttk.Button(bar, text="Defaults", command=self.defaults).pack(side="left")
         ttk.Button(bar, text="Save profile...", command=self.save).pack(side="left", padx=(16, 4))
         ttk.Button(bar, text="Load profile...", command=self.load).pack(side="left")
+
+        host = ttk.Frame(self)
+        host.grid(row=3, column=0, columnspan=2, sticky="ew", pady=(8, 0))
+        ttk.Label(host, text="Computer").pack(side="left")
+        self.layout = ttk.Combobox(host, width=10, state="readonly",
+                                   values=[layouts.LAYOUT_LABELS[n] for n in layouts.LAYOUTS])
+        self.layout.pack(side="left", padx=(6, 12))
+        self.layout.bind("<<ComboboxSelected>>", lambda _e: self.save_host())
+        ttk.Label(host, text="System").pack(side="left")
+        self.os_choice = ttk.Combobox(host, width=10, state="readonly",
+                                      values=[layouts.OS_LABELS[n] for n in layouts.OS_NAMES])
+        self.os_choice.pack(side="left", padx=(6, 12))
+        self.os_choice.bind("<<ComboboxSelected>>", lambda _e: self.save_host())
+        ttk.Button(host, text="Match this computer",
+                   command=self.match_host).pack(side="left")
+        self._host_ready = False
 
         self.status = ttk.Label(self, text="Starting...", anchor="w")
         self.status.grid(row=2, column=0, columnspan=2, sticky="ew", pady=(10, 0))
@@ -192,12 +203,15 @@ class App(ttk.Frame):
             return self.connect()
         try:
             self.actions = self.pad.read_all()
+            info = self.pad.info()
         except PadError as exc:
             return self.say(f"Read failed: {exc}")
+        note = self.show_host(info)
         self.baseline = [Action(a.type, a.mod, a.code) for a in self.actions]
         self.refresh()
         self.select(SLOTS[self.selected])
-        self.say("Loaded the mapping currently stored on the pad.")
+        loaded = "Loaded the mapping currently stored on the pad."
+        self.say(f"{note} {loaded}" if note else loaded)
 
     def apply(self) -> None:
         if not self.pad:
@@ -268,10 +282,13 @@ class App(ttk.Frame):
         self.kind.set(kind)
 
         for name, var in self.mods.items():
-            var.set(bool(action.mod & padlib.MODIFIERS[name]))
-        if action.type == ACT_KEY:
-            self.key.set(padlib.KEY_NAMES.get(action.code) or
-                         (chr(action.code) if 0x20 <= action.code < 0x7F else ""))
+            var.set(False)
+        if action.type == ACT_KEY and str(action) != "-":
+            mod_names, key = split_binding(str(action))
+            for name in mod_names:
+                if name in self.mods:
+                    self.mods[name].set(True)
+            self.key.set(key)
         elif action.type == ACT_CON:
             self.con_choice.set(padlib.CON_NAMES.get(action.code, ""))
         elif action.type == ACT_MOUSE:
@@ -307,8 +324,8 @@ class App(ttk.Frame):
             name = self.key.get()
             if not name:
                 return Action()
-            mod = sum(padlib.MODIFIERS[n] for n, v in self.mods.items() if v.get())
-            return Action(ACT_KEY, mod, padlib.KEYS[name])
+            mods = [n for n, v in self.mods.items() if v.get()]
+            return padlib.parse("+".join(mods + [name]))
         if kind == "con":
             name = self.con_choice.get()
             return Action(ACT_CON, 0, padlib.CONSUMER[name]) if name else Action()
@@ -358,18 +375,74 @@ class App(ttk.Frame):
         self.unbind_all("<KeyPress>")
         self.capture_btn.config(text="Capture a keypress")
 
-        name = KEYSYM_MAP.get(event.keysym, event.keysym.lower())
-        if name in padlib.KEYS:
-            self.key.set(name)
-            # event.state carries the modifiers held at the time.
-            self.mods["ctrl"].set(bool(event.state & 0x0004))
-            self.mods["shift"].set(bool(event.state & 0x0001))
-            self.mods["alt"].set(bool(event.state & 0x20000))
-            self.edited()
-            self.say(f"Captured {self.actions[self.selected]}")
-        else:
+        state = int(event.state or 0)
+        binding = capture_from_event(
+            event.keysym,
+            event.char or "",
+            shift=bool(state & 0x0001),
+            ctrl=bool(state & 0x0004),
+            # Tk uses 0x0008 on X11 and 0x20000 on Windows for Alt.
+            alt=bool(state & 0x20000) or bool(state & 0x0008),
+            meta=bool(state & 0x00040) or bool(state & 0x40000),
+        )
+        if not binding:
             self.say(f"Could not map the key '{event.keysym}'. Pick it from the list.")
+            return "break"
+        try:
+            action = padlib.parse(binding)
+        except ValueError as exc:
+            self.say(str(exc))
+            return "break"
+        self.actions[self.selected] = action
+        self.kind.set("key")
+        self.select(SLOTS[self.selected])
+        self.say(f"Captured {binding}")
         return "break"
+
+    def show_host(self, info) -> str | None:
+        self._host_ready = False
+        if not info.supports_host:
+            self.layout.set("")
+            self.os_choice.set("")
+            return "This firmware still types for a US keyboard. Reflash 1.1.0."
+        layout, os_name, _confirmed = layouts.unpack_profile(info.host)
+        self.layout.set(layouts.LAYOUT_LABELS[layout])
+        self.os_choice.set(layouts.OS_LABELS[os_name])
+        self._host_ready = True
+        return None
+
+    def _selected_host(self) -> tuple[str, str] | None:
+        labels = {label: name for name, label in layouts.LAYOUT_LABELS.items()}
+        os_labels = {label: name for name, label in layouts.OS_LABELS.items()}
+        layout = labels.get(self.layout.get())
+        os_name = os_labels.get(self.os_choice.get())
+        if not layout or not os_name:
+            return None
+        return layout, os_name
+
+    def save_host(self) -> None:
+        if not self._host_ready or not self.pad:
+            return
+        chosen = self._selected_host()
+        if not chosen:
+            return
+        try:
+            self.pad.set_host(*chosen)
+        except PadError as exc:
+            return self.say(f"Could not store the layout: {exc}")
+        self.say(f"Typing for {self.layout.get()} / {self.os_choice.get()}.")
+
+    def match_host(self) -> None:
+        if not self.pad:
+            return
+        detected = layouts.detect_layout()
+        if not detected:
+            return self.say("Could not tell which layout this computer uses. Pick one.")
+        self._host_ready = False
+        self.layout.set(layouts.LAYOUT_LABELS[detected])
+        self.os_choice.set(layouts.OS_LABELS[layouts.detect_os()])
+        self._host_ready = True
+        self.save_host()
 
     def say(self, text: str) -> None:
         self.status.config(text=text)

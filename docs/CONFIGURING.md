@@ -88,47 +88,55 @@ and `MOUSE_MOVE_UP` and friends. Scroll and movement take a step count:
 
 **Nothing.** `none` leaves a slot inert.
 
-## Keys are positions, not characters
+## Host keyboard layout
 
-This is the one genuinely confusing thing about USB keyboards, and it explains
-most surprises.
+A USB keyboard reports key positions. The computer decides which character or
+shortcut that position is, using its own layout. Firmware 1.0.0 always sent the
+US position, so `ctrl+z` became Ctrl+Y on a German keyboard and `@` became `"`.
 
-A keyboard never transmits characters. It transmits the *position* of the key
-pressed, and the receiving computer's keyboard layout decides which character
-that position produces. There is no code for `ä`, and there is no code for `@`.
+Bindings are the thing you want typed. The pad stores a separate setting for
+which computer it is plugged into, and translates when the key is pressed.
+`@` is Shift+2 on US, Shift+' on UK, AltGr+Q on German and AltGr+à on French.
+`ctrl+z` is the key that layout labels Z, so undo stays undo. `z` and `y` are
+swapped the same way. Named keys such as Enter, the arrows and F13 are
+positions and do not change.
 
-So a binding that produces `@` on a US layout produces `"` on a German one,
-because on both it is the position labelled `2` with shift held. The pad is
-doing the same thing in both cases; the layouts disagree about what it means.
+The layouts are US, UK, German and French. Set the one this computer uses:
 
-Two consequences worth internalising:
+```
+python tools/padconf.py layout          # what the pad is set to
+python tools/padconf.py layout auto     # match this computer
+python tools/padconf.py layout de
+python tools/padconf.py layout fr linux
+```
 
-- **Profiles are not portable between layouts.** A layout shared by someone on
-  a US keyboard will type different punctuation on a German one.
-- **Some characters cannot be bound by name.** Anything the host produces with
-  AltGr has to be bound as the AltGr chord.
+The configurator has the same control at the top of the page. The setting
+survives unplugging. It is not part of a profile: a shared profile should type
+`@` on both computers, and each computer keeps its own layout setting.
 
-For German (QWERTZ) hosts the common ones are named already: `ä`, `ö`, `ü` and
-`ß`, with `Ä`, `Ö` and `Ü` adding shift automatically. The rest:
+Characters that the selected layout has no key for are typed with an
+operating-system sequence. Windows uses Alt and the numeric keypad (CP1252, so
+this matches a US or Western European install, not a Cyrillic one). Linux uses
+Ctrl+Shift+U. macOS has no equivalent that works without a special input
+source, so those characters do nothing there rather than typing the wrong
+thing. A character that does have a key is held down normally, and the host's
+own repeat works. A fallback sequence types once per press.
 
-| Character | Binding | Why |
-| --- | --- | --- |
-| `@` | `altgr+q` | AltGr chord on a German layout |
-| `€` | `altgr+e` | |
-| `\` | `altgr+ß` | |
-| `~` | `altgr+RAW:48` | AltGr and the `+` key |
-| `\|` | `altgr+RAW:100` | AltGr and the `<` key |
-| `{` `[` `]` `}` | `altgr+7` `altgr+8` `altgr+9` `altgr+0` | |
-| `#` | `RAW:49` | Its own key, next to Enter |
-| `<` `>` | `RAW:100`, `shift+RAW:100` | |
+`shift+2` is still the 2 key with Shift held, which is a different character
+on a German keyboard than on a US one. Bind `@` when `@` is what you want.
+Capture does that for you: it records the character the computer produced, not
+the US position of the key you hit.
 
-`RAW:<n>` sends HID usage `n` directly and is the escape hatch for any position
-without a name here. It accepts decimal or hex (`RAW:0x31`), takes modifiers,
-and covers usages 1 to 119. That ceiling comes from the firmware's key encoding,
-which reserves the values below it for ASCII and modifiers.
+`RAW:<n>` skips translation and sends HID usage `n`. It accepts decimal or hex
+(`RAW:0x31`), takes modifiers, and covers usages 1 to 119. That is the escape
+hatch for a position with no name here, and for layouts this firmware does not
+know. A [HID usage table](https://usb.org/document-library/hid-usage-tables-16)
+lists the numbers; keyboard usages are in section 10.
 
-A [HID usage table](https://usb.org/document-library/hid-usage-tables-16) lists
-the numbers; keyboard usages are in section 10.
+Firmware older than 1.1.0 cannot store the setting. The tools say so instead
+of pretending the command worked. Bindings written by 1.0.0 as a raw German
+position (the old meaning of `ä`) keep sending that position until the binding
+is written again. Saving a profile and loading it back stores the character.
 
 ## Profiles
 

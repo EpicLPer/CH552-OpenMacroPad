@@ -60,7 +60,9 @@ __code USB_CFG_DESCR_HID CfgDescr = {
     .bLength            = sizeof(USB_HID_DESCR),  // size of the descriptor in bytes: 9
     .bDescriptorType    = USB_DESCR_TYP_HID,      // HID descriptor: 0x21
     .bcdHID             = 0x0110,                 // HID class spec version (BCD: 1.1)
-    .bCountryCode       = 33,                     // country code: US
+    .bCountryCode       = 0,                      // not a localised keyboard; the
+                                                  // host layout is applied in
+                                                  // layout_plan.c instead
     .bNumDescriptors    = 1,                      // number of report descriptors: 1
     .bDescriptorTypeX   = 34,                     // descriptor type: report
     .wDescriptorLength  = sizeof(ReportDescr)     // report descriptor length

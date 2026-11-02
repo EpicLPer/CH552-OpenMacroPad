@@ -65,6 +65,10 @@ def main() -> int:
               raw_set(pad, 0, ACT_KEY, 0, 0), ST_BAD_ACTION)
         check("keyboard code above one byte is refused",
               raw_set(pad, 0, ACT_KEY, 0, 0x0100), ST_BAD_ACTION)
+        check("a unicode character is accepted",
+              raw_set(pad, 0, ACT_KEY, 0, 0x8000 | 0x00E4), ST_OK)
+        check("unicode code point zero is refused",
+              raw_set(pad, 0, ACT_KEY, 0, 0x8000), ST_BAD_ACTION)
         check("consumer code past the descriptor maximum is refused",
               raw_set(pad, 0, ACT_CON, 0, 0x0400), ST_BAD_ACTION)
         check("consumer code at the maximum is accepted",
@@ -91,9 +95,11 @@ def main() -> int:
               raw_set(pad, 0, ACT_KEY, 0xFF, ord("e")), ST_OK)
 
         print("\nRecovery")
+        before = pad.dump()
         pad.corrupt()
         stored = pad.dump()
-        check("checksum is damaged in flash", stored[:2], b"PD")
+        check("magic is left intact", stored[:2], b"PD")
+        check("checksum byte is flipped", stored[4], before[4] ^ 0xFF)
         print("       the pad must now be replugged to confirm it self-heals")
 
         pad.reset()

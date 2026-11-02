@@ -7,6 +7,37 @@ The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
 which is noted explicitly below when it happens.
 
+## 1.1.0
+
+Storage format is still 2. Existing bindings are kept.
+
+- Characters and letter shortcuts are typed for the computer's keyboard layout
+  instead of always as if it were a US keyboard. `@` is Shift+2 on US, Shift+'
+  on UK, AltGr+Q on German and AltGr+à on French. `ctrl+z` is the key that
+  layout calls Z, so undo stays undo when Y and Z are swapped.
+- The layout is a setting on the pad (`us`, `uk`, `de`, `fr`), plus the OS
+  used when a character has no key there. Windows types those with Alt+numpad.
+  Linux types them with Ctrl+Shift+U. macOS does not guess.
+- `ä`, `ö`, `ü`, `ß`, `€` and the other named non-ASCII characters are stored
+  as characters. A binding saved by 1.0.0 as a raw German key position still
+  sends that position until it is written again.
+- Firmware 1.0.0 had no room in the report for this. Reflash `padfw-1.1.0`
+  before setting the layout. The tools refuse the command on older firmware
+  rather than pretending it worked.
+
+Fixed in the same pass:
+
+- Keyboard LED state was read from the report id, so Num Lock looked stuck on
+  and Scroll Lock looked stuck off. The discovery firmware's scroll-lock gate
+  could not open.
+- Pressing a modifier on its own never transmitted a report.
+- Key 1, which is wired straight to a pin, was not debounced.
+- The matrix accepted two different scan codes in a row. It now waits for the
+  same code twice, which is what the TM1650 datasheet asks for.
+- Report ids are written at startup. The build skips XDATA initialisers, so a
+  value that existed only there was not reliable.
+- Loading a profile rewrote every slot, including ones that had not changed.
+
 ## 1.0.0
 
 First release. Storage format 2.

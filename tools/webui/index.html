@@ -13,6 +13,17 @@
   <div id="device" class="device">Connecting...</div>
 </header>
 
+<div class="hostbar" id="hostbar" hidden>
+  <label>Computer
+    <select id="layout"></select>
+  </label>
+  <label>System
+    <select id="os"></select>
+  </label>
+  <button id="matchHost" class="ghost" type="button">Match this computer</button>
+  <span id="hostNote" class="hint"></span>
+</div>
+
 <main>
   <section class="panel">
     <h2>Keys</h2>
@@ -43,16 +54,17 @@
           <label for="rawUsage">HID usage number</label>
           <input id="rawUsage" type="number" min="1" max="119" value="52">
           <p class="hint">
-            Sends a key position directly, for anything without a name here.
-            Usage 52 is the key a US layout calls apostrophe, which a German
-            layout uses for &auml;.
+            Sends that key position and ignores the computer's layout. Use it
+            for a key that has no name here. Named characters and shortcuts
+            above already follow the layout selected at the top.
           </p>
         </div>
 
         <button id="capture" class="ghost">Capture a keypress</button>
         <p class="hint">
-          The pad sends key <em>positions</em>, not characters, so what actually
-          gets typed depends on the keyboard layout the host is set to.
+          A captured character is stored as that character, so <em>@</em> and
+          Ctrl+Z come out right on US, UK, German and French computers. Set
+          the computer's layout above; the pad cannot see it by itself.
         </p>
         <p class="hint">
           Windows handles some chords itself and will not pass them on, the

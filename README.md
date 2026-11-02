@@ -9,9 +9,9 @@ follow it to any computer, and they are changed over USB without reflashing and
 without installing a driver.
 
 This already works and can be used day to day, but it is still early and needs
-polish. International layout handling, the configurator UX and support for other
-board variants all have rough edges. Treat it as a solid starting point rather
-than a finished product; improvements and pull requests are very welcome.
+polish. The configurator UX and support for other board variants have rough
+edges. Treat it as a solid starting point rather than a finished product;
+improvements and pull requests are very welcome.
 
 ![The macropad board](docs/img/board-front.jpg)
 
@@ -104,11 +104,11 @@ that reboots the pad into its bootloader.
 
 ## Known limitations
 
-- A USB keyboard transmits key *positions*, not characters, and the host's
-  keyboard layout decides what each position produces. A profile made on a
-  German layout will type different characters on a US one. This affects some
-  punctuation in ways that look like bugs but are not; see
-  [`docs/CONFIGURING.md`](docs/CONFIGURING.md#keys-are-positions-not-characters).
+- Characters and letter shortcuts follow the host layout stored on the pad
+  (US, UK, German or French). Set it once per computer with the configurator
+  or `python tools/padconf.py layout auto`. Layouts outside those four, and
+  characters a layout has no key for on macOS, are not translated. See
+  [`docs/CONFIGURING.md`](docs/CONFIGURING.md#host-keyboard-layout).
 - Bindings are single actions. There are no multi-keystroke macros, no text
   strings and no layers.
 - One action per slot, so a key cannot behave differently on a long press.

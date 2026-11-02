@@ -22,8 +22,9 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
+import layouts
 import padlib
-from padlib import Action, Pad, PadError, SLOTS, SLOT_LABELS
+from padlib import Action, Pad, PadError, SLOTS, SLOT_LABELS, capture_binding
 
 WEBUI = Path(__file__).parent / "webui"
 
@@ -48,17 +49,31 @@ def read_state() -> dict:
     with lock, Pad() as pad:
         info = pad.info()
         actions = pad.read_all()
+    layout, os_name, confirmed = layouts.unpack_profile(info.host)
+    detected = layouts.detect_layout()
     return {
         "version": info.format,
         "firmware": info.firmware,
         "count": info.count,
         "flash": info.flash,
         "slots": slot_entries(actions),
+        "host": {
+            "supported": info.supports_host,
+            "layout": layout,
+            "os": os_name,
+            "confirmed": confirmed,
+            "detectedLayout": detected,
+            "detectedOs": layouts.detect_os(),
+            "layouts": [{"id": name, "label": layouts.LAYOUT_LABELS[name]}
+                        for name in layouts.LAYOUTS],
+            "oses": [{"id": name, "label": layouts.OS_LABELS[name]}
+                     for name in layouts.OS_NAMES],
+        },
         "options": {
             "modifiers": padlib.MOD_ORDER,
             "keys": sorted(k for k in padlib.KEYS if len(k) > 1)
                     + [k for k in padlib.KEYS if len(k) == 1]
-                    + list(padlib.SHIFTED_ALIASES),
+                    + list(padlib.EXTRA_CHARS),
             "rawMax": padlib.RAW_MAX,
             "consumer": sorted(padlib.CONSUMER),
             "mouseButtons": list(padlib.MOUSE_BUTTONS),
@@ -82,6 +97,49 @@ def apply_changes(changes: dict[str, str]) -> dict:
             pad.set(idx, action)
         actions = pad.read_all()
     return {"slots": slot_entries(actions)}
+
+
+def set_host(body: dict) -> dict:
+    layout = body.get("layout") or ""
+    os_name = body.get("os") or ""
+    if layout == "auto":
+        layout = layouts.detect_layout()
+        if not layout:
+            raise PadError(
+                "Could not tell which keyboard layout this computer uses. "
+                "Choose US, UK, German or French."
+            )
+        os_name = layouts.detect_os()
+    if layout not in layouts.LAYOUTS:
+        raise PadError(f"Unknown layout '{layout}'")
+    if os_name not in layouts.OS_NAMES:
+        raise PadError(f"Unknown operating system '{os_name}'")
+    with lock, Pad() as pad:
+        pad.set_host(layout, os_name)
+        info = pad.info()
+        actions = pad.read_all()
+    # read_state rebuilds the host block; keep this response shaped the same
+    # way so the page can adopt it without a second request.
+    state = read_state()
+    state["slots"] = slot_entries(actions)
+    state["firmware"] = info.firmware
+    return state
+
+
+def captured(body: dict) -> dict:
+    binding = capture_binding(
+        str(body.get("key") or ""),
+        shift=bool(body.get("shift")),
+        ctrl=bool(body.get("ctrl")),
+        alt=bool(body.get("alt")),
+        meta=bool(body.get("meta")),
+        altgr=bool(body.get("altgr")),
+    )
+    if not binding:
+        raise PadError(f"'{body.get('key')}' has no binding name")
+    # Reject anything parse() would reject, so the editor never stages junk.
+    padlib.parse(binding)
+    return {"binding": binding}
 
 
 def simple(action: str) -> dict:
@@ -145,6 +203,10 @@ class Handler(BaseHTTPRequestHandler):
             return self._guard(lambda: simple("reset"))
         if self.path == "/api/bootloader":
             return self._guard(lambda: simple("bootloader"))
+        if self.path == "/api/host":
+            return self._guard(lambda: set_host(body))
+        if self.path == "/api/capture":
+            return self._guard(lambda: captured(body))
         self._send(404, b"not found", "text/plain")
 
 

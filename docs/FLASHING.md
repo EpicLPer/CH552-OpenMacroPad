@@ -81,7 +81,7 @@ handing over to the firmware, which is why the flashing command below takes a
 ## 4. Flash
 
 ```
-python tools/chflash.py firmware/prebuilt/padfw-1.0.0.bin --wait 30
+python tools/chflash.py firmware/prebuilt/padfw-1.1.0.bin --wait 30
 ```
 
 Run that, then trigger the bootloader by whichever method above. Expected
@@ -91,7 +91,7 @@ output:
 Waiting up to 30s for the bootloader. Plug the cable in now ...
 Connected via the libusb-win32 backend.
 Chip 0x52, bootloader v2.40
-Flashing padfw-1.0.0.bin (5784 bytes)
+Flashing padfw-1.1.0.bin (9536 bytes)
 Done. The pad restarts on the new firmware.
 ```
 

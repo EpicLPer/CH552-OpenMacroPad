@@ -14,6 +14,22 @@
 
 __xdata action_t Keymap[ACT_COUNT];
 
+// Which computer the bindings are being typed on. 0 is US + Windows, which is
+// what firmware 1.0.0 effectively hardcoded, so an old keymap keeps that
+// behaviour until a tool writes something else.
+static __xdata uint8_t hostProfile;
+
+uint8_t PADCFG_hostProfile(void) {
+  return hostProfile;
+}
+
+static uint8_t validProfile(uint8_t profile) {
+  if(profile & ~(HOST_LAY_MASK | HOST_CONFIRMED | HOST_OS_MASK)) return 0;
+  if((profile & HOST_LAY_MASK) > 3) return 0;
+  if(((profile & HOST_OS_MASK) >> HOST_OS_SHIFT) > 2) return 0;
+  return 1;
+}
+
 // Data-flash layout: a six byte header then ACT_COUNT four byte actions.
 // 6 + 18 * 4 = 78 bytes of the 128 available.
 #define HDR_MAGIC0      0
@@ -81,6 +97,10 @@ static uint8_t validAction(uint8_t type, uint8_t mod, uint16_t code) {
     case ACT_NONE:
       return (mod == 0) && (code == 0);
     case ACT_KEY:
+      // 0x8000 | codepoint stores a character above ASCII (ä, €, …). The low
+      // 15 bits are the code point. Anything else above one byte is rejected
+      // so a confused host cannot invent a new encoding.
+      if(code & 0x8000) return (code & 0x7FFF) != 0;
       return (code > 0) && (code <= 0xFF);
     case ACT_CON:
       return (mod == 0) && (code > 0) && (code <= CON_CODE_MAX);
@@ -123,8 +143,9 @@ static uint8_t saveAll(void) {
 
   // The checksum and magic go last. If power is lost partway through, the
   // header stays invalid and the next boot rebuilds from defaults rather than
-  // running a half-written map.
-  ok &= EEPROM_write(HDR_RESERVED, 0);
+  // running a half-written map. The host profile is not part of the keymap,
+  // so a binding reset must not forget which computer this pad is typing for.
+  ok &= EEPROM_write(HDR_RESERVED, hostProfile);
   ok &= EEPROM_write(HDR_CRC,      crc8());
   ok &= EEPROM_write(HDR_COUNT,    ACT_COUNT);
   ok &= EEPROM_write(HDR_VERSION,  CFG_VERSION);
@@ -155,7 +176,14 @@ static uint8_t loadStored(void) {
 }
 
 void PADCFG_init(void) {
-  if(loadStored()) return;
+  uint8_t stored = EEPROM_read(HDR_RESERVED);
+  // Erased flash reads back as 0xFF. That is not a profile; US/Windows is.
+  hostProfile = validProfile(stored) ? stored : 0;
+  if(loadStored()) {
+    if(EEPROM_read(HDR_RESERVED) != hostProfile)
+      EEPROM_write(HDR_RESERVED, hostProfile);
+    return;
+  }
   loadDefaults();
   saveAll();
 }
@@ -166,6 +194,10 @@ void PADCFG_init(void) {
 
 void PADCFG_onReport(void) {
   uint8_t i;
+  // Keyboard LED output is report id 1, and the LED bits are the next byte.
+  // Latch them before the config path rejects the report. Discovery firmware
+  // reads the latch for its Scroll Lock gate.
+  if(EP2_buffer[0] == 1) KBD_noteLeds(EP2_buffer[1]);
   if(cmdPending) return;                        // still working on the last one
   if(EP2_buffer[0] != CFG_REPORT_ID) return;    // not for us, probably keyboard LEDs
   for(i = 0; i < sizeof(cmdBuf); i++) cmdBuf[i] = EP2_buffer[i];
@@ -195,6 +227,7 @@ void PADCFG_task(void) {
       reply[8]  = FW_VERSION_MAJOR;
       reply[9]  = FW_VERSION_MINOR;
       reply[10] = FW_VERSION_PATCH;
+      reply[11] = hostProfile;
       break;
 
     case CMD_GET_ACTION:
@@ -240,6 +273,13 @@ void PADCFG_task(void) {
       // there is a supported way to damage the stored block.
       reply[7] = EEPROM_write(HDR_CRC, EEPROM_read(HDR_CRC) ^ 0xFF)
                  ? ST_OK : ST_WRITE_FAIL;
+      break;
+
+    case CMD_SET_HOST:
+      if(!validProfile(cmdBuf[2])) { reply[7] = ST_BAD_ACTION; break; }
+      hostProfile = cmdBuf[2];
+      reply[2] = hostProfile;
+      reply[7] = EEPROM_write(HDR_RESERVED, hostProfile) ? ST_OK : ST_WRITE_FAIL;
       break;
 
     case CMD_BOOTLOADER:

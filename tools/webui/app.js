@@ -47,6 +47,7 @@ async function refresh() {
     return say(data.error, "bad");
   }
   options = data.options;
+  showHost(data.host);
   el("device").textContent =
     `Connected \u2014 firmware ${data.firmware}, ${data.count} slots, `
     + `${data.flash} bytes of storage`;
@@ -55,6 +56,62 @@ async function refresh() {
   buildOptionLists();
   render();
   say("Ready.");
+}
+
+function showHost(host) {
+  const bar = el("hostbar");
+  if (!host) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  const layout = el("layout");
+  const os = el("os");
+  layout.replaceChildren();
+  os.replaceChildren();
+  for (const item of host.layouts) {
+    const o = document.createElement("option");
+    o.value = item.id;
+    o.textContent = item.label;
+    layout.appendChild(o);
+  }
+  for (const item of host.oses) {
+    const o = document.createElement("option");
+    o.value = item.id;
+    o.textContent = item.label;
+    os.appendChild(o);
+  }
+  layout.value = host.layout;
+  os.value = host.os;
+  layout.disabled = !host.supported;
+  os.disabled = !host.supported;
+  el("matchHost").hidden = !host.supported || !host.detectedLayout;
+  const note = el("hostNote");
+  if (!host.supported) {
+    note.textContent = "This firmware still types for a US keyboard. Reflash 1.1.0 or newer.";
+    note.className = "hint warn";
+    return;
+  }
+  if (host.detectedLayout &&
+      (host.detectedLayout !== host.layout || host.detectedOs !== host.os)) {
+    const found = host.layouts.find((item) => item.id === host.detectedLayout);
+    note.textContent = `This computer looks like ${found ? found.label : host.detectedLayout}.`;
+    note.className = "hint warn";
+  } else if (!host.confirmed) {
+    note.textContent = "Not confirmed yet. Match this computer if the guess is wrong.";
+    note.className = "hint warn";
+  } else {
+    note.textContent = "Characters and shortcuts follow this layout.";
+    note.className = "hint";
+  }
+}
+
+async function saveHost(layout, os) {
+  say("Saving the computer layout...");
+  const res = await call("/api/host", { layout, os });
+  if (!res.ok) return say(res.error, "bad");
+  showHost(res.host);
+  say("The pad will type for that computer.", "good");
 }
 
 function adoptSlots(slots) {
@@ -155,6 +212,28 @@ function fill(select, values) {
 
 // Parse a stored binding back into editor state, so selecting a slot shows what
 // it currently does rather than a blank form.
+// '+' is a key, so a binding may end in '++'. Splitting on every '+' would
+// turn that into an empty key name.
+function splitChord(binding) {
+  if (binding === "+") return { mods: [], key: "+" };
+  if (binding.endsWith("++")) {
+    const head = binding.slice(0, -2);
+    return { mods: head ? head.split("+") : [], key: "+" };
+  }
+  const parts = binding.split("+");
+  const key = parts.pop();
+  return { mods: parts.filter(Boolean), key };
+}
+
+function ensureKeyOption(key) {
+  const select = el("keySelect");
+  if ([...select.options].some((o) => o.value === key)) return;
+  const o = document.createElement("option");
+  o.value = key;
+  o.textContent = key;
+  select.appendChild(o);
+}
+
 function showEditor() {
   const binding = staged.get(selected);
   const info = stored.get(selected);
@@ -171,14 +250,14 @@ function showEditor() {
   setKind(kind, false);
 
   if (kind === "key") {
-    const parts = binding.split("+");
-    const key = parts.pop();
+    const { mods, key } = splitChord(binding);
     for (const b of el("mods").children)
-      b.classList.toggle("on", parts.includes(b.dataset.mod));
+      b.classList.toggle("on", mods.includes(b.dataset.mod));
     if (key.startsWith("RAW:")) {
       el("keySelect").value = RAW_OPTION;
       el("rawUsage").value = key.slice(4);
-    } else if (options.keys.includes(key)) {
+    } else {
+      ensureKeyOption(key);
       el("keySelect").value = key;
     }
     el("rawRow").hidden = el("keySelect").value !== RAW_OPTION;
@@ -309,25 +388,38 @@ el("capture").onclick = () => {
   say("Listening for a keypress.");
 };
 
-window.addEventListener("keydown", (e) => {
+el("layout").onchange = () => saveHost(el("layout").value, el("os").value);
+el("os").onchange = () => saveHost(el("layout").value, el("os").value);
+el("matchHost").onclick = () => saveHost("auto", "");
+
+window.addEventListener("keydown", async (e) => {
   if (!capturing) return;
   e.preventDefault();
   capturing = false;
   el("capture").textContent = "Capture a keypress";
 
-  const name = KEY_FROM_BROWSER[e.key] ||
-               (e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase());
-  if (!options.keys.includes(name))
-    return say(`'${e.key}' has no name in the list. Choose "custom HID usage" `
-               + `and enter the key position number instead.`, "bad");
+  const res = await call("/api/capture", {
+    key: KEY_FROM_BROWSER[e.key] || e.key,
+    shift: e.shiftKey,
+    ctrl: e.ctrlKey,
+    alt: e.altKey,
+    meta: e.metaKey,
+    altgr: e.getModifierState("AltGraph"),
+  });
+  if (!res.ok) return say(res.error, "bad");
 
-  el("keySelect").value = name;
-  for (const b of el("mods").children) {
-    const on = { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, win: e.metaKey }
-      [b.dataset.mod];
-    if (on !== undefined) b.classList.toggle("on", on);
+  const { mods, key } = splitChord(res.binding);
+  setKind("key", false);
+  for (const b of el("mods").children)
+    b.classList.toggle("on", mods.includes(b.dataset.mod));
+  if (key.startsWith("RAW:")) {
+    el("keySelect").value = RAW_OPTION;
+    el("rawUsage").value = key.slice(4);
+  } else {
+    ensureKeyOption(key);
+    el("keySelect").value = key;
   }
-  setKind("key");
+  commitEditor();
 });
 
 el("apply").onclick = apply;

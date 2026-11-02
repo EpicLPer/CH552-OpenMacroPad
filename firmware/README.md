@@ -90,8 +90,17 @@ the 128 available:
 | 2 | Format version |
 | 3 | Action count |
 | 4 | CRC-8 over the action block |
-| 5 | Reserved |
+| 5 | Host profile: layout in bits 0-2, confirmed in bit 3, OS in bits 4-5 |
 | 6 + 4n | Action *n*: type, modifier mask, code low, code high |
+
+The host profile is how a stored character becomes a HID report. `us`, `uk`,
+`de` and `fr` each have a table generated from `tools/layouts.py`. Letter and
+digit shortcuts use the key that layout labels with that character.
+`layout_plan.c` is the decision, checked against the Python tables by
+`tools/test_layout.py`, and `layout.c` is what actually sends the reports.
+Codes with bit 15 set are Unicode scalars; codes from 136 are raw HID usages
+and are not translated. A character the layout cannot type is an Alt+numpad
+sequence on Windows or Ctrl+Shift+U on Linux.
 
 Action types are unbound, keyboard, consumer and mouse. Keyboard actions carry a
 bitmask of the eight modifiers, so any chord is expressible. Mouse actions split
@@ -100,8 +109,8 @@ wheel, horizontal pan and pointer movement.
 
 The format version and the firmware version move independently. Most firmware
 releases will not disturb stored keymaps, and bumping the format version forces
-every pad to rebuild from defaults, so only change it when the layout really
-does change.
+every pad to rebuild from defaults, so only change it when the bytes on flash
+really move.
 
 Data flash is used rather than code flash because code flash is rated for only
 about 200 erase cycles. Storing a user-editable keymap there would spend the

@@ -36,6 +36,28 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
 .device.bad { color: var(--danger); }
 .device.good { color: var(--ok); }
 
+.hostbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--edge);
+  background: #191c22;
+  color: var(--dim);
+  font-size: 13px;
+}
+.hostbar label { display: flex; gap: 6px; align-items: center; }
+.hostbar select, .hostbar button {
+  background: #232833;
+  color: var(--ink);
+  border: 1px solid var(--edge);
+  border-radius: 6px;
+  padding: 4px 8px;
+}
+.hostbar .hint { margin: 0; }
+.hostbar .hint.warn { color: var(--dirty); }
+
 main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;

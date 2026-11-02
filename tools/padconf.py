@@ -29,6 +29,10 @@ Examples:
     python padconf.py load myprofile.json
     python padconf.py reset
     python padconf.py bootloader
+    python padconf.py layout                 # which computer the pad types for
+    python padconf.py layout auto            # match this computer
+    python padconf.py layout de
+    python padconf.py layout fr linux
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ from __future__ import annotations
 import argparse
 import sys
 
+import layouts
 from padlib import (Pad, PadError, SLOTS, SLOT_LABELS, binding_catalogue,
                     load_profile, parse, save_profile)
 
@@ -49,10 +54,51 @@ def slot_index(name: str) -> int:
 def show(pad: Pad) -> None:
     info = pad.info()
     print(f"Firmware {info.firmware}, config format v{info.format}, "
-          f"{info.count} slots, {info.flash} bytes of data flash\n")
+          f"{info.count} slots, {info.flash} bytes of data flash")
+    if info.supports_host:
+        layout, os_name, confirmed = layouts.unpack_profile(info.host)
+        mark = "" if confirmed else " (not confirmed)"
+        print(f"Typing for {layouts.LAYOUT_LABELS[layout]} / "
+              f"{layouts.OS_LABELS[os_name]}{mark}")
+        detected = layouts.detect_layout()
+        detected_os = layouts.detect_os()
+        if detected and (detected != layout or detected_os != os_name):
+            print(f"This computer looks like {layouts.LAYOUT_LABELS[detected]} / "
+                  f"{layouts.OS_LABELS[detected_os]}.")
+            print("  python padconf.py layout auto")
+    else:
+        print("This firmware still types as if the computer were a US keyboard.")
+        print("Reflash 1.1.0 or newer to follow the real layout.")
+    print()
     for slot, action in zip(SLOTS, pad.read_all()):
         label = f"Key {slot}" if slot.isdigit() else SLOT_LABELS[slot]
         print(f"  {slot:<10} {label:<20} {action}")
+
+
+def set_layout(pad: Pad, layout: str, os_name: str | None) -> None:
+    info = pad.info()
+    if not info.supports_host:
+        raise PadError(
+            f"Firmware {info.firmware} cannot store a host layout. "
+            "Reflash firmware 1.1.0 or newer."
+        )
+    current_layout, current_os, _ = layouts.unpack_profile(info.host)
+    if layout == "auto":
+        detected = layouts.detect_layout()
+        if not detected:
+            raise PadError(
+                "Could not tell which keyboard layout this computer uses. "
+                "Pass it explicitly: layout us|uk|de|fr"
+            )
+        layout = detected
+        os_name = layouts.detect_os()
+    if os_name is None:
+        os_name = current_os if info.host_confirmed else layouts.detect_os()
+    pad.set_host(layout, os_name)
+    label = layouts.LAYOUT_LABELS[layout]
+    print(f"Host set to {label} / {layouts.OS_LABELS[os_name]}.")
+    print("Characters and letter shortcuts now follow that computer. "
+          "Existing bindings were kept.")
 
 
 def main() -> int:
@@ -72,6 +118,12 @@ def main() -> int:
     sub.add_parser("dump", help="hex dump of the raw data flash (diagnostics)")
     sub.add_parser("corrupt", help="damage the stored checksum, to test recovery")
     sub.add_parser("bootloader", help="reboot into the bootloader for reflashing")
+    p_lay = sub.add_parser("layout", help="show or set the host keyboard layout")
+    p_lay.add_argument("layout", nargs="?",
+                       choices=["auto", *layouts.LAYOUTS],
+                       help="us, uk, de, fr, or auto to match this computer")
+    p_lay.add_argument("os", nargs="?", choices=layouts.OS_NAMES,
+                       help="windows, linux or macos; default keeps the current one")
     args = ap.parse_args()
 
     # Listing bindings is useful without a pad plugged in.
@@ -115,6 +167,11 @@ def main() -> int:
                 pad.corrupt()
                 print("Stored checksum damaged. Replug the pad: it should detect\n"
                       "the corruption and rebuild the defaults by itself.")
+            elif args.cmd == "layout":
+                if args.layout is None:
+                    show(pad)
+                else:
+                    set_layout(pad, args.layout, args.os)
             elif args.cmd == "bootloader":
                 pad.bootloader()
                 print("Device should now be in the bootloader. Flash with:")

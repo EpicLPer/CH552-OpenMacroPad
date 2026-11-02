@@ -3,9 +3,11 @@
 Both the command line tool and the GUI build on this, so the binding tables and
 the wire format only exist in one place.
 
-Key codes are the encoding used by the firmware's `usb_conkbd.h`, where
-printable characters are plain ASCII and everything else sits above 0x7F. That
-is not the raw HID usage table, so do not mix the two.
+A printable binding is the character the user wants, not a key position. The
+firmware turns it into the right HID usage for the layout stored on the pad
+(see layouts.py). Named keys and RAW usages are positions and are not
+translated. Codes below 128 are ASCII characters; codes at or above 0x8000 are
+a Unicode scalar in the low 15 bits; codes from 136 up are HID usages.
 """
 
 from __future__ import annotations
@@ -13,10 +15,16 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 
-try:
-    import hid
-except ImportError as exc:                                  # pragma: no cover
-    raise SystemExit("error: hidapi missing.  pip install hidapi") from exc
+import layouts
+
+
+def _hid():
+    """hidapi is only needed when a pad is actually opened."""
+    try:
+        import hid
+    except ImportError as exc:                              # pragma: no cover
+        raise PadError("hidapi is not installed.  pip install hidapi") from exc
+    return hid
 
 VID, PID = 0x1189, 0x8890
 USAGE_PAGE = 0xFF00
@@ -26,6 +34,7 @@ FORMAT_VERSION = 2
 
 (CMD_GET_INFO, CMD_GET_ACTION, CMD_SET_ACTION, CMD_RESET,
  CMD_BOOTLOADER, CMD_DUMP, CMD_CORRUPT) = range(1, 8)
+CMD_SET_HOST = 0x08
 
 ACT_NONE, ACT_KEY, ACT_CON, ACT_MOUSE = range(4)
 MS_BUTTON, MS_WHEEL, MS_PAN, MS_MOVE_X, MS_MOVE_Y = range(5)
@@ -79,14 +88,16 @@ KEYS.update({f"f{n}": 0xC1 + n for n in range(1, 13)})
 KEYS.update({f"f{n}": 0xF0 + n - 13 for n in range(13, 25)})
 KEYS.update({chr(c): c for c in range(0x20, 0x7F)})
 
-# A HID keyboard reports key positions, never characters: the host's layout
-# decides what each position produces. Codes below 128 go through the firmware's
-# ASCII table, which assumes a US layout. Everything else is addressed by raw
-# HID usage, which the firmware's encoding exposes as usage + 136. That is how
-# F13 and the arrow keys are already defined, so nothing in the firmware needs
-# to change to reach the rest of the usage table.
-RAW_BASE = 136
+# Named keys and RAW:<n> are HID usages. The firmware exposes them as
+# usage + 136, which is how F13 and the arrows are already defined.
+RAW_BASE = layouts.RAW_BASE
 RAW_MAX = 255 - RAW_BASE                # usage 119 is the highest reachable
+
+# Characters the layout tables know as real keys on at least one of US, UK,
+# German and French. On a layout that has no such key, the firmware types them
+# with the OS fallback (Alt+numpad on Windows, Ctrl+Shift+U on Linux).
+EXTRA_CHARS = ["ä", "ö", "ü", "ß", "Ä", "Ö", "Ü", "€", "£", "é", "è", "à",
+               "ù", "ç", "§", "°", "µ", "²", "³"]
 
 
 def raw(usage: int) -> int:
@@ -106,18 +117,8 @@ SYSTEM_KEYS = {
     "menu": 0x65, "power": 0x66, "nonus_backslash": 0x64,
 }
 
-# Positions that carry different characters depending on layout. These names
-# describe what a German (QWERTZ) host produces; on a US layout the same
-# positions give ' ; [ and - respectively.
-GERMAN_KEYS = {"ä": 0x34, "ö": 0x33, "ü": 0x2F, "ß": 0x2D}
-
 KEYS.update({name: raw(u) for name, u in KEYPAD.items()})
 KEYS.update({name: raw(u) for name, u in SYSTEM_KEYS.items()})
-KEYS.update({name: raw(u) for name, u in GERMAN_KEYS.items()})
-
-# The firmware applies shift itself for ASCII capitals, but raw usages bypass
-# that table, so the uppercase forms need the modifier added here.
-SHIFTED_ALIASES = {"Ä": "ä", "Ö": "ö", "Ü": "ü"}
 
 KEY_ALIASES = {"return": "enter", "escape": "esc", "caps": "capslock",
                "del": "delete", "ins": "insert", "pgup": "pageup",
@@ -155,10 +156,8 @@ MOUSE_DELTAS = {
 }
 
 # Reverse lookup for display. Printable characters are left out so they render
-# as themselves, with two exceptions: names longer than one character win, so
-# 0x20 shows as "space" rather than an invisible blank that would not survive
-# being written to a profile and read back, and the non-ASCII layout keys keep
-# their names.
+# as themselves, except names longer than one character: 0x20 shows as "space"
+# rather than an invisible blank that would not survive a profile round trip.
 KEY_NAMES = {v: k for k, v in KEYS.items() if len(k) > 1 or v >= 0x7F}
 CON_NAMES = {v: k for k, v in CONSUMER.items()}
 MOUSE_BTN_NAMES = {v: k for k, v in MOUSE_BUTTONS.items()}
@@ -189,7 +188,10 @@ class Action:
         if self.type == ACT_KEY:
             name = KEY_NAMES.get(self.code)
             if name is None:
-                if 0x20 <= self.code < 0x7F:
+                if self.code & 0x8000:
+                    cp = self.code & 0x7FFF
+                    name = chr(cp) if cp >= 0x20 else f"U+{cp:04X}"
+                elif 0x20 <= self.code < 0x7F:
                     name = chr(self.code)
                 elif self.code >= RAW_BASE:
                     name = f"RAW:{self.code - RAW_BASE}"
@@ -231,18 +233,15 @@ def parse(spec: str) -> Action:
         return Action(ACT_MOUSE, 0, (sub << 8) | (val & 0xFF))
 
     # Everything else is a keyboard chord: zero or more modifiers then one key.
-    parts = spec.split("+")
-    if parts[-1] == "" and len(parts) > 1:      # someone wrote "ctrl++"
-        parts = parts[:-2] + ["+"]
-
+    # '+' is a key name, so 'ctrl++' is ctrl and the plus key.
+    mod_names, key = split_binding(spec)
     mod = 0
-    for name in parts[:-1]:
+    for name in mod_names:
         low = MOD_ALIASES.get(name.strip().lower(), name.strip().lower())
         if low not in MODIFIERS:
             raise ValueError(f"unknown modifier '{name}'")
         mod |= MODIFIERS[low]
-
-    key = parts[-1].strip()
+    key = key.strip()
 
     # Raw HID usage, the escape hatch for positions with no name of their own.
     if key[:4].upper() == "RAW:":
@@ -256,19 +255,122 @@ def parse(spec: str) -> Action:
                 f"raw HID usage must be between 1 and {RAW_MAX}, got {usage}")
         return Action(ACT_KEY, mod, raw(usage))
 
-    if key in SHIFTED_ALIASES:
-        mod |= MODIFIERS["shift"]
-        key = SHIFTED_ALIASES[key]
-
-    # Printable characters are taken literally so that capitals stay capitals;
-    # the firmware maps them and adds shift itself.
-    if len(key) == 1 and 0x20 <= ord(key) < 0x7F:
-        return Action(ACT_KEY, mod, ord(key))
+    # A single character is the character itself, including ä and €. Capitals
+    # stay capitals; the firmware adds whatever shift or AltGr that layout needs.
+    if len(key) == 1:
+        cp = ord(key)
+        if cp < 0x20 or cp == 0x7F or cp > 0x7FFF:
+            raise ValueError(f"cannot bind character U+{cp:04X}")
+        code = cp if cp < 0x80 else 0x8000 | cp
+        return Action(ACT_KEY, mod, code)
 
     low = KEY_ALIASES.get(key.lower(), key.lower())
     if low in KEYS:
         return Action(ACT_KEY, mod, KEYS[low])
     raise ValueError(f"unknown key '{key}'")
+
+
+def split_binding(spec: str) -> tuple[list[str], str]:
+    """Split 'ctrl+shift+z' into (['ctrl', 'shift'], 'z').
+
+    A trailing '+' is the plus key, so 'ctrl++' is ctrl and '+', and '+' alone
+    is just that key.
+    """
+    if spec == "+":
+        return [], "+"
+    if spec.endswith("++"):
+        head = spec[:-2]
+        return (head.split("+") if head else []), "+"
+    parts = spec.split("+")
+    key = parts.pop() if parts else ""
+    return [p for p in parts if p], key
+
+
+# Browser KeyboardEvent.key and the Tk keysyms that differ from it.
+_CAPTURE_NAMED = {
+    "enter": "enter", "return": "enter", "escape": "esc", "esc": "esc",
+    "backspace": "backspace", "tab": "tab", "space": "space", " ": "space",
+    "arrowup": "up", "arrowdown": "down", "arrowleft": "left",
+    "arrowright": "right", "up": "up", "down": "down", "left": "left",
+    "right": "right", "pageup": "pageup", "pagedown": "pagedown",
+    "prior": "pageup", "next": "pagedown", "home": "home", "end": "end",
+    "insert": "insert", "delete": "delete", "capslock": "capslock",
+    "backspace": "backspace",
+}
+_KEYSYM_CHAR = {
+    "at": "@", "quotedbl": '"', "asciicircum": "^", "asciitilde": "~",
+    "grave": "`", "numbersign": "#", "exclam": "!", "dollar": "$",
+    "percent": "%", "ampersand": "&", "apostrophe": "'", "parenleft": "(",
+    "parenright": ")", "asterisk": "*", "plus": "+", "minus": "-",
+    "comma": ",", "period": ".", "slash": "/", "backslash": "\\",
+    "colon": ":", "semicolon": ";", "less": "<", "equal": "=", "greater": ">",
+    "question": "?", "bracketleft": "[", "bracketright": "]", "braceleft": "{",
+    "braceright": "}", "bar": "|", "underscore": "_", "space": " ",
+    "adiaeresis": "ä", "odiaeresis": "ö", "udiaeresis": "ü", "ssharp": "ß",
+    "Adiaeresis": "Ä", "Odiaeresis": "Ö", "Udiaeresis": "Ü",
+    "eacute": "é", "egrave": "è", "agrave": "à", "ugrave": "ù", "ccedilla": "ç",
+    "EuroSign": "€", "euro": "€", "sterling": "£", "section": "§",
+    "degree": "°", "mu": "µ",
+}
+
+
+def capture_binding(key: str, *, shift: bool = False, ctrl: bool = False,
+                    alt: bool = False, meta: bool = False,
+                    altgr: bool = False) -> str | None:
+    """Turn one captured key event into a binding string.
+
+    `key` is what the host says the key produced (browser `KeyboardEvent.key`,
+    or a Tk keysym). Shift is not recorded on top of a character that already
+    includes it: Shift+2 on a US keyboard is `@`, and storing `shift+@` would
+    shift a second time on a layout where `@` is AltGr.
+    """
+    token = key or ""
+    low = token.lower()
+    named = _CAPTURE_NAMED.get(low)
+    if named is None and len(token) > 1 and low in KEYS:
+        named = low
+    if named:
+        mods = []
+        if ctrl and not altgr:
+            mods.append("ctrl")
+        if shift:
+            mods.append("shift")
+        if alt and not altgr:
+            mods.append("alt")
+        if meta:
+            mods.append("win")
+        return "+".join(mods + [named])
+
+    ch = token if len(token) == 1 else _KEYSYM_CHAR.get(token, "")
+    if len(ch) != 1 or ord(ch) < 0x20 or ord(ch) == 0x7F:
+        return None
+    # Windows delivers AltGr as Ctrl+Alt. A symbol produced that way is the
+    # character; Ctrl+Alt+letter is a real chord and is kept.
+    if altgr or (ctrl and alt and not ch.isalpha()):
+        ctrl = False
+        alt = False
+    mods = []
+    if ctrl:
+        mods.append("ctrl")
+    if meta:
+        mods.append("win")
+    if alt:
+        mods.append("alt")
+    if shift and ch.isalpha() and ch.islower():
+        mods.append("shift")
+    return "+".join(mods + [ch]) if mods else ch
+
+
+def capture_from_event(keysym: str, char: str, *, shift: bool = False,
+                       ctrl: bool = False, alt: bool = False,
+                       meta: bool = False, altgr: bool = False) -> str | None:
+    """Pick the character a toolkit reports, falling back to its keysym."""
+    if char and len(char) == 1 and 0x20 <= ord(char) != 0x7F:
+        token = char
+    else:
+        token = keysym
+    return capture_binding(token, shift=shift, ctrl=ctrl, alt=alt,
+                           meta=meta, altgr=altgr)
 
 
 def binding_catalogue() -> dict[str, list[str]]:
@@ -280,7 +382,7 @@ def binding_catalogue() -> dict[str, list[str]]:
                        "enter", "esc", "tab", "backspace", "space"],
         "Numeric keypad": list(KEYPAD),
         "System": list(SYSTEM_KEYS),
-        "German layout positions": list(GERMAN_KEYS) + list(SHIFTED_ALIASES),
+        "Accented characters": list(EXTRA_CHARS),
         "Volume and media": [k for k in CONSUMER if k.startswith(("VOL_", "MEDIA_"))],
         "Applications": [k for k in CONSUMER if k.startswith(("APP_", "WEB_"))],
         "Display and power": [k for k in CONSUMER if k.startswith(("BRIGHT_", "SYS_"))],
@@ -303,10 +405,28 @@ class Info:
     count: int          # number of bindable slots
     flash: int          # bytes of data flash
     firmware: str       # firmware version, as major.minor.patch
+    host: int = 0       # layout/OS profile byte; 0 on firmware before 1.1.0
+
+    @property
+    def layout(self) -> str:
+        return layouts.unpack_profile(self.host)[0]
+
+    @property
+    def os(self) -> str:
+        return layouts.unpack_profile(self.host)[1]
+
+    @property
+    def host_confirmed(self) -> bool:
+        return layouts.unpack_profile(self.host)[2]
+
+    @property
+    def supports_host(self) -> bool:
+        return layouts.firmware_supports_host(self.firmware)
 
 
 class Pad:
     def __init__(self) -> None:
+        hid = _hid()
         path = next((i["path"] for i in hid.enumerate(VID, PID)
                      if i.get("usage_page") == USAGE_PAGE), None)
         if path is None:
@@ -355,7 +475,9 @@ class Pad:
                 f"Device speaks config format v{version}, these tools expect "
                 f"v{FORMAT_VERSION}. Reflash the firmware or update the tools."
             )
-        return Info(version, count, size, f"{r[8]}.{r[9]}.{r[10]}")
+        firmware = f"{r[8]}.{r[9]}.{r[10]}"
+        host = r[11] if layouts.firmware_supports_host(firmware) else 0
+        return Info(version, count, size, firmware, host)
 
     def get(self, idx: int) -> Action:
         r = self.request(CMD_GET_ACTION, idx)
@@ -370,8 +492,24 @@ class Pad:
         return [self.get(i) for i in range(len(SLOTS))]
 
     def write_all(self, actions: list[Action]) -> None:
+        # Skip slots that already match. Each set rewrites the checksum byte,
+        # so loading an unchanged profile used to burn a flash cycle per slot.
+        current = self.read_all()
         for i, action in enumerate(actions):
-            self.set(i, action)
+            if current[i] != action:
+                self.set(i, action)
+
+    def set_host(self, layout: str, os_name: str) -> int:
+        info = self.info()
+        if not info.supports_host:
+            raise PadError(
+                f"Firmware {info.firmware} cannot store a host layout. "
+                "Reflash firmware 1.1.0 or newer."
+            )
+        byte = layouts.pack_profile(layout, os_name, confirmed=True)
+        reply = self.request(CMD_SET_HOST, byte)
+        self._check(reply)
+        return reply[2]
 
     def reset(self) -> None:
         self._check(self.request(CMD_RESET))
