@@ -7,15 +7,21 @@
 const VID = 0x1189;
 const PID = 0x8890;
 const REPORT = 3;
+const CMD_GET_INFO = 0x01;
 const CMD_INFO = 0x10;
 const CMD_BEGIN = 0x11;
 const CMD_DATA = 0x12;
 const CMD_COMMIT = 0x13;
 const DATA = 12;
 const ST_OK = 1;
+// One-time image. 1.0.0 and 1.1.0 have no updater command, so this is chflash.
+const FULL_IMAGE = "firmware/prebuilt/padfw-1.2.0.bin";
+const FULL_BYTES = 13296;
 
 let hid = null;
 let image = null;
+let padVersion = null;
+let padCanUpdate = false;
 
 const fw = (id) => document.getElementById(id);
 
@@ -52,22 +58,46 @@ function waitReport(cmd, ms) {
     function onReport(event) {
       if (event.reportId !== REPORT) return;
       const view = event.data;
+      // WebHID drops the report id, so byte 0 is the firmware's byte 1.
       if (view.getUint8(0) !== cmd) return;
       clearTimeout(timer);
       hid.removeEventListener("inputreport", onReport);
-      resolve({
-        status: view.getUint8(1),
-        detail: view.getUint8(2) | (view.getUint8(3) << 8),
-      });
+      resolve(view);
     }
     hid.addEventListener("inputreport", onReport);
   });
 }
 
+// 1.0.0 and 1.1.0 answer an unknown command with a zeroed buffer and the
+// command echoed. The updater reads its status from byte 1 of that view,
+// which stays 0. That is not ST_OK (1) and not an updater error code.
+// GET_INFO (0x01) is implemented on those builds; its version is bytes 7-9.
+function firmwareVersion(view) {
+  if (view.byteLength < 10) return null;
+  if (view.getUint8(1) !== 0x50 || view.getUint8(2) !== 0x44) return null;
+  return `${view.getUint8(7)}.${view.getUint8(8)}.${view.getUint8(9)}`;
+}
+
+function olderThanUpdater(version) {
+  const [major, minor] = version.split(".").map((n) => Number(n));
+  return major < 1 || (major === 1 && minor < 2);
+}
+
+function chflashMessage(version) {
+  return `This pad is firmware ${version}. It has no browser updater, so Connect and Update firmware stop here. ` +
+    `Flash the full image once: python tools/chflash.py ${FULL_IMAGE} --wait 30 ` +
+    `(${FULL_BYTES} bytes). Start that command, then reboot into the bootloader. ` +
+    `The .web.bin is for a pad that is already running 1.2.0.`;
+}
+
 async function transact(cmd, extra, ms) {
   const pending = waitReport(cmd, ms);
   await hid.sendReport(REPORT, payload(cmd, extra));
-  const reply = await pending;
+  const view = await pending;
+  const reply = {
+    status: view.getUint8(1),
+    detail: view.getUint8(2) | (view.getUint8(3) << 8),
+  };
   if (reply.status !== ST_OK) {
     const why = {
       3: "the pad rejected the image",
@@ -94,17 +124,46 @@ async function connectHid() {
   hid = devices[0];
   if (!hid) return;
   if (!hid.opened) await hid.open();
+  padVersion = null;
+  padCanUpdate = false;
+  let version = null;
+  try {
+    const pending = waitReport(CMD_GET_INFO, 1000);
+    await hid.sendReport(REPORT, payload(CMD_GET_INFO));
+    version = firmwareVersion(await pending);
+  } catch (err) {
+    fwNote(err.message, "bad");
+    return;
+  }
+  padVersion = version;
+  if (version && olderThanUpdater(version)) {
+    fwNote(chflashMessage(version), "warn");
+    fw("fwGo").disabled = false;
+    return;
+  }
   try {
     const info = await transact(CMD_INFO, null, 1000);
-    fwNote(`Updater ready. Largest image is ${info.detail} bytes.`, "good");
+    padCanUpdate = true;
+    fwNote(`Updater ready on firmware ${version || "1.2.0"}. Largest image is ${info.detail} bytes.`, "good");
     fw("fwGo").disabled = !image;
   } catch (err) {
-    fwNote(`${err.message} A 1.0.0 or 1.1.0 pad needs the one-time chflash first.`, "warn");
+    // Status 0 here is the empty reply from a pad with no updater command.
+    // A 1.2.0 pad returns status 1 for this same command.
+    if (err.reply && err.reply.status === 0) {
+      fwNote(chflashMessage(version || "1.0.0 or 1.1.0"), "warn");
+      fw("fwGo").disabled = false;
+      return;
+    }
+    fwNote(err.message, "bad");
   }
 }
 
 async function runUpdate() {
   if (!hid || !image) return;
+  if (!padCanUpdate) {
+    fwNote(chflashMessage(padVersion || "1.0.0 or 1.1.0"), "warn");
+    return;
+  }
   fw("fwGo").disabled = true;
   const bar = fw("fwProgress");
   bar.max = image.length;
@@ -148,7 +207,11 @@ async function runUpdate() {
     await transact(CMD_COMMIT, null, 5000);
     fwNote("Update accepted. The pad is rebooting. Reconnect it to set the keyboard layout.", "good");
   } catch (err) {
-    fwNote(err.message, "bad");
+    if (err.reply && err.reply.status === 0) {
+      fwNote(chflashMessage(padVersion || "1.0.0 or 1.1.0"), "warn");
+    } else {
+      fwNote(err.message, "bad");
+    }
     fw("fwGo").disabled = false;
   }
 }
@@ -161,7 +224,11 @@ fw("fwFile").onchange = () => {
   if (!file) return;
   file.arrayBuffer().then((buf) => {
     image = new Uint8Array(buf);
-    fwNote(`${file.name}, ${image.length} bytes.`, "");
+    if (hid && !padCanUpdate) {
+      fwNote(`${chflashMessage(padVersion || "1.0.0 or 1.1.0")} Selected ${file.name} (${image.length} bytes) stays on the computer.`, "warn");
+    } else {
+      fwNote(`${file.name}, ${image.length} bytes.`, "");
+    }
     fw("fwGo").disabled = !hid;
   });
 };

@@ -29,8 +29,13 @@ steps below with the **full** `padfw-1.2.0.bin`, not the `.web.bin`.
 ## First install, and the one-time step from 1.0.0 or 1.1.0
 
 Firmware 1.0.0 and 1.1.0 can reboot into the ROM bootloader, but they cannot
-write their own program flash. The first jump to 1.2.0 is still `chflash.py`.
-Every later update can be the browser path above.
+write their own program flash. The first jump to 1.2.0 is still `chflash.py`
+of the full `firmware/prebuilt/padfw-1.2.0.bin` (13296 bytes). Every later
+update can be the browser path above.
+
+On those older builds the configurator still connects. The updater command
+is not implemented, so the pad answers with an empty reply. The Firmware
+section names the version and this full image. The `.web.bin` is not sent.
 
 Be aware of one thing before starting: **the stock firmware cannot be backed
 up.** The bootloader has no read command, and the verify command cannot be

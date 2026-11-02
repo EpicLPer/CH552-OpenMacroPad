@@ -21,6 +21,9 @@ layout setting.
 - A transfer that stops early leaves the reset page alone, so holding the
   top-left key still enters the ROM bootloader. The new reset page is copied
   only after the rest of the image has been checked.
+- A 1.0.0 or 1.1.0 pad has no updater command. The configurator used to
+  show that empty reply as "status 0". It now reads the firmware version
+  and names the one-time chflash of the 13296-byte full image.
 - The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
   interrupt table was only six bytes, so C startup sat on the USB vector, and
   the jump to the resident USB handler was written at `0x0040` instead of
