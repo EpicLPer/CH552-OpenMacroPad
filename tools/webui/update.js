@@ -74,7 +74,7 @@ async function transact(cmd, extra, ms) {
       4: "the pad could not write flash",
       5: "the pad is not ready for that command",
       6: "the image checksum did not match",
-      7: "the image is the wrong size (use the .web.bin, not the full recovery file)",
+      7: "the image is not a bootable .web.bin (wrong size, or the USB jump is not at offset 0x43)",
     }[reply.status] || `status ${reply.status}`;
     const err = new Error(why);
     err.reply = reply;
@@ -109,6 +109,18 @@ async function runUpdate() {
   const bar = fw("fwProgress");
   bar.max = image.length;
   bar.value = 0;
+  if (image.length < 0x400 || image.length > 0x2000) {
+    fwNote(`Image is ${image.length} bytes. Choose padfw-1.2.0.web.bin, not the full recovery file.`, "bad");
+    fw("fwGo").disabled = false;
+    return;
+  }
+  const trampoline = image[0] === 0x02 && image[1] === 0x24 && image[2] === 0x00 &&
+    image[0x43] === 0x02 && image[0x44] === 0x24 && image[0x45] === 0x03;
+  if (!trampoline) {
+    fwNote("This file would not enumerate. Use the rebuilt padfw-1.2.0.web.bin (USB jump at offset 0x43), not an older copy or the full .bin.", "bad");
+    fw("fwGo").disabled = false;
+    return;
+  }
   const crc = crc32(image);
   const begin = new Uint8Array(6);
   begin[0] = image.length & 0xFF;

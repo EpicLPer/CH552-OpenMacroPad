@@ -91,7 +91,11 @@ def test_built_images() -> None:
     check("web fits below staging", web == full[:len(web)] and len(web) <= APP_MAX, True)
     check("web has a reset page", len(web) >= PAGE, True)
     check("reset trampoline", web[:3], bytes((0x02, 0x24, 0x00)))
-    check("usb trampoline", web[0x40:0x43], bytes((0x02, 0x24, 0x03)))
+    # Hardware USB vector is 0x0043. 0x0040 is padding in front of it.
+    check("usb trampoline", web[0x43:0x46], bytes((0x02, 0x24, 0x03)))
+    check("no early usb jump", web[0x40:0x43] == bytes((0x02, 0x24, 0x03)), False)
+    sp = full.find(bytes((0x75, 0x81)))
+    check("gsinit after vectors", sp > 0x43, True)
     check("resident entries are jumps", full[0x2400], 0x02)
     # ljmp targets sit inside the resident area and below the ROM bootloader.
     reset_target = (full[0x2401] << 8) | full[0x2402]

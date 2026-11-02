@@ -107,9 +107,10 @@ sequence on Windows or Ctrl+Shift+U on Linux.
 The browser updater writes only `0x0000`-`0x1FFF`. `0x2000` stages the new
 reset page and `0x2400`-`0x37FF` is the USB stack plus the writer, installed
 by `chflash` and not replaced by a `.web.bin`. `firmware/iapvec.asm` is the
-six-byte jump table at `0x2400`. Reset and the USB vector in page 0 are
-patched to those fixed addresses so a later image still lands in the resident
-code. Data-flash byte 127 is `0x00` while an update has erased application
+six-byte jump table at `0x2400` and the interrupt table at address 0. Reset
+(`0x0000`) and the USB vector (`0x0043`, not `0x0040`) are `ljmp`s to those
+fixed addresses, so a later image still lands in the resident code. SDCC does
+not emit that USB slot itself: the ISR is not in the file that contains main. Data-flash byte 127 is `0x00` while an update has erased application
 pages; the reset stub then stays in the updater instead of jumping at a
 half-written image. `tools/test_iap.py` checks the image layout.
 

@@ -188,6 +188,26 @@ def bin_to_ihx(blob: bytes, out: Path) -> None:
     out.write_text("\n".join(lines) + "\n")
 
 
+# CH552 vectors sit at 0x0003 + 8*n. USB is interrupt 8, so the CPU enters at
+# 0x0043. Offset 0x0040 is three bytes earlier; writing the trampoline there
+# splits gsinit and the chip never reaches USB_init.
+USB_VECTOR = 0x0043
+
+
+def check_boot_image(blob: bytes) -> None:
+    """Reject an image whose startup code occupies the interrupt table."""
+    if blob[:3] != bytes((0x02, 0x24, 0x00)):
+        sys.exit("error: reset vector is not ljmp 0x2400")
+    if blob[USB_VECTOR:USB_VECTOR + 3] != bytes((0x02, 0x24, 0x03)):
+        sys.exit("error: USB vector at 0x0043 is not ljmp 0x2403")
+    if blob[0x40:0x43] == bytes((0x02, 0x24, 0x03)):
+        sys.exit("error: USB trampoline is at 0x0040, three bytes before the vector")
+    # First instruction of __sdcc_gsinit_startup is mov sp,#imm (75 81).
+    sp = blob.find(bytes((0x75, 0x81)))
+    if sp < 0 or sp <= USB_VECTOR:
+        sys.exit(f"error: gsinit at 0x{sp:04X} overlaps the interrupt vectors")
+
+
 def report_size(mem: Path) -> None:
     if not mem.exists():
         return
@@ -276,9 +296,12 @@ def main() -> None:
     if target == "padfw":
         # Stable trampolines. A later browser update rewrites these three-byte
         # jumps and must keep landing on the resident area installed by chflash.
+        # iapvec.asm already emits them; the writes here keep a rebuilt page 0
+        # pointed at 0x2400 / 0x2403 even if SDCC later emits its own USB slot.
         blob = bytearray(binfile.read_bytes())
         blob[0x00:0x03] = bytes((0x02, 0x24, 0x00))
-        blob[0x40:0x43] = bytes((0x02, 0x24, 0x03))
+        blob[USB_VECTOR:USB_VECTOR + 3] = bytes((0x02, 0x24, 0x03))
+        check_boot_image(blob)
         binfile.write_bytes(blob)
         web_end = low_image_end(ihx)
         if web_end > 0x2000:

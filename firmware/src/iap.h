@@ -20,6 +20,7 @@
 #define IAP_RESIDENT     0x2400       // USB stack and this updater
 #define IAP_TRAMP_RESET  0x2400       // ljmp stub_boot_body
 #define IAP_TRAMP_USB    0x2403       // ljmp USB_ISR
+#define IAP_VEC_USB      0x0043       // CPU entry, 0x0003 + 8*INT_NO_USB
 #define IAP_FLAG_ADDR    127          // data-flash byte, outside the keymap
 #define IAP_FLAG_DIRTY   0x00         // an update erased part of the application
 // 0xFF (erased) and any other value mean "boot the application".

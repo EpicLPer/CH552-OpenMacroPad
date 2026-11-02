@@ -21,6 +21,12 @@ layout setting.
 - A transfer that stops early leaves the reset page alone, so holding the
   top-left key still enters the ROM bootloader. The new reset page is copied
   only after the rest of the image has been checked.
+- The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
+  interrupt table was only six bytes, so C startup sat on the USB vector, and
+  the jump to the resident USB handler was written at `0x0040` instead of
+  `0x0043`. Reflash the rebuilt full `padfw-1.2.0.bin`. The matching
+  `.web.bin` is the one to send afterwards; the earlier 7962-byte file has
+  the same broken vectors.
 
 ## 1.1.0
 

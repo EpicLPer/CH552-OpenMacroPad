@@ -155,6 +155,10 @@ driver instead of libusb-win32. Redo step 2.
 **The bootloader stops responding after repeated attempts** &mdash; it can wedge
 if hammered. Unplug and replug to reset it.
 
-**Flashing succeeds but the pad does nothing** &mdash; bridge J2 while plugging
-in and reflash. The ROM bootloader is intact regardless of what is in code
-flash, so this always works.
+**Flashing succeeds but the pad does nothing, or Windows reports an
+unrecognized device** &mdash; the bootloader handed off and the firmware did
+not finish enumerating. Hold the top-left key, or bridge J2, while plugging
+in and flash the full `padfw-1.2.0.bin` again (not the `.web.bin`). The ROM
+bootloader is intact regardless of what is in code flash. `padfw-1.1.0.bin`
+is a complete keyboard image without the browser updater, if you want that
+before retrying 1.2.0.

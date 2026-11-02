@@ -191,6 +191,19 @@ static void iap_active_reset(void) {
 
 // Returns 1 only if the reset page was not modified. Returns 0 if that page
 // was erased and could not be rebuilt; the caller must enter the ROM bootloader.
+// Page 0 of the running image is still in place. Do not replace it with a
+// reset page that misses the resident trampolines: the first 1.2.0 image
+// wrote the USB jump at 0x0040 and the host then saw an unrecognized device.
+static uint8_t image_vectors_ok(void) {
+  if(read_code(IAP_STAGING) != 0x02) return 0;
+  if(read_code(IAP_STAGING + 1) != 0x24) return 0;
+  if(read_code(IAP_STAGING + 2) != 0x00) return 0;
+  if(read_code(IAP_STAGING + IAP_VEC_USB) != 0x02) return 0;
+  if(read_code(IAP_STAGING + IAP_VEC_USB + 1) != 0x24) return 0;
+  if(read_code(IAP_STAGING + IAP_VEC_USB + 2) != 0x03) return 0;
+  return 1;
+}
+
 static uint8_t commit_page0(void) {
   uint16_t i;
   uint8_t lo, hi;
@@ -268,6 +281,10 @@ static void session(void) {
       }
       if(crc_image() != iap_crc) {
         reply(cmd, ST_BAD_CRC, iap_off);
+        continue;
+      }
+      if(!image_vectors_ok()) {
+        reply(cmd, ST_BAD_RANGE, IAP_VEC_USB);
         continue;
       }
       if(!commit_page0()) {
@@ -373,6 +390,9 @@ void stub_boot_body(void) __naked {
   __endasm;
 }
 
+// SDCC puts the interrupt table in the file that contains main, and only for
+// ISRs defined there. This one has to stay in the resident area, so the slot
+// at 0x0043 is the ljmp in iapvec.asm, not a vector generated from this line.
 void USB_ISR(void) __interrupt(INT_NO_USB) {
   USB_interrupt();
 }
