@@ -4,12 +4,62 @@
 // costs a data-flash cycle, so the pad is left alone until the user commits,
 // and even then only the slots that actually changed are sent.
 
-const KNOB_ROWS = [
-  ["Top", ["top-ccw", "top-press", "top-cw"]],
-  ["Bottom", ["bot-ccw", "bot-press", "bot-cw"]],
+const SVGNS = "http://www.w3.org/2000/svg";
+
+// Twelve keys, three rows of four, top-left to bottom-right. The two knobs
+// sit on the right of that grid, matching the board: top knob, then the
+// empty middle footprint, then the bottom knob.
+const KEY_GEO = (() => {
+  const out = [];
+  for (let n = 1; n <= 12; n++) {
+    const i = n - 1;
+    out.push({
+      id: String(n),
+      x: 32 + (i % 4) * 112,
+      y: 36 + Math.floor(i / 4) * 96,
+      w: 100,
+      h: 80,
+    });
+  }
+  return out;
+})();
+
+const KNOBS = [
+  {
+    name: "Top", cy: 76,
+    parts: [
+      { id: "top-ccw", caption: "Left" },
+      { id: "top-press", caption: "Press" },
+      { id: "top-cw", caption: "Right" },
+    ],
+  },
+  {
+    name: "Bottom", cy: 268,
+    parts: [
+      { id: "bot-ccw", caption: "Left" },
+      { id: "bot-press", caption: "Press" },
+      { id: "bot-cw", caption: "Right" },
+    ],
+  },
 ];
 
-// Browser key names differ from the firmware's; translate the ones that clash.
+// Names the browser often never delivers. Ordinary characters stay in the
+// text box. nonus_backslash is HID usage 0x64, not the character "<".
+const MANUAL_GROUPS = [
+  ["F13–F24", Array.from({ length: 12 }, (_, i) => [`f${i + 13}`, `F${i + 13}`])],
+  ["Keypad", [
+    ["numlock", "Num Lock"], ["kp_divide", "Keypad /"], ["kp_multiply", "Keypad *"],
+    ["kp_minus", "Keypad −"], ["kp_plus", "Keypad +"], ["kp_enter", "Keypad Enter"],
+    ["kp_dot", "Keypad ."],
+    ...Array.from({ length: 10 }, (_, i) => [`kp_${i}`, `Keypad ${i}`]),
+  ]],
+  ["System", [
+    ["printscreen", "Print Screen"], ["scrolllock", "Scroll Lock"],
+    ["pause", "Pause"], ["menu", "Menu"], ["power", "Power"],
+    ["nonus_backslash", "Non-US \\ (HID 0x64)"],
+  ]],
+];
+
 const KEY_FROM_BROWSER = {
   " ": "space", Enter: "enter", Escape: "esc", Backspace: "backspace",
   Tab: "tab", ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left",
@@ -21,14 +71,11 @@ const KEY_FROM_BROWSER = {
 const el = (id) => document.getElementById(id);
 
 let options = null;
-let stored = new Map();     // what the pad currently holds
-let staged = new Map();     // what the user has built
+let stored = new Map();
+let staged = new Map();
 let selected = null;
 let capturing = false;
-
-// ===================================================================================
-// Server
-// ===================================================================================
+let editorFor = null;
 
 async function call(path, body) {
   const res = await fetch(path, body
@@ -38,23 +85,44 @@ async function call(path, body) {
   return res.json();
 }
 
+function blankSlots() {
+  const slots = [];
+  for (let i = 1; i <= 12; i++) {
+    slots.push({ id: String(i), label: `Key ${i}`, group: "key", binding: "-" });
+  }
+  const labels = {
+    "top-press": "Top knob press", "bot-press": "Bottom knob press",
+    "top-cw": "Top knob right", "top-ccw": "Top knob left",
+    "bot-cw": "Bottom knob right", "bot-ccw": "Bottom knob left",
+  };
+  for (const [id, label] of Object.entries(labels)) {
+    slots.push({ id, label, group: "knob", binding: "-" });
+  }
+  return slots;
+}
+
 async function refresh() {
   say("Reading the pad...");
   const data = await call("/api/state");
   if (!data.ok) {
     el("device").textContent = "Not connected";
     el("device").className = "device bad";
+    if (!stored.size) adoptSlots(blankSlots());
+    drawPad();
     return say(data.error, "bad");
   }
   options = data.options;
   showHost(data.host);
   el("device").textContent =
-    `Connected \u2014 firmware ${data.firmware}, ${data.count} slots, `
-    + `${data.flash} bytes of storage`;
+    `Connected — firmware ${data.firmware}, ${data.count} slots`;
   el("device").className = "device good";
   adoptSlots(data.slots);
-  buildOptionLists();
-  render();
+  buildPickers();
+  if (!selected) selected = "1";
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
   say("Ready.");
 }
 
@@ -98,10 +166,10 @@ function showHost(host) {
     note.textContent = `This computer looks like ${found ? found.label : host.detectedLayout}.`;
     note.className = "hint warn";
   } else if (!host.confirmed) {
-    note.textContent = "Not confirmed yet. Match this computer if the guess is wrong.";
+    note.textContent = "Not confirmed yet. Match this computer if that guess is wrong.";
     note.className = "hint warn";
   } else {
-    note.textContent = "Characters and shortcuts follow this layout.";
+    note.textContent = "Characters follow this keyboard.";
     note.className = "hint";
   }
 }
@@ -117,103 +185,113 @@ async function saveHost(layout, os) {
 function adoptSlots(slots) {
   stored = new Map(slots.map((s) => [s.id, s]));
   staged = new Map(slots.map((s) => [s.id, s.binding]));
-  if (!selected) selected = slots[0].id;
 }
 
-// ===================================================================================
-// Rendering
-// ===================================================================================
+function face(binding) {
+  if (!binding || binding === "-" || binding.toLowerCase() === "none") return "";
+  // Allow a wrap after + _ or : so labels break at words, not mid-token.
+  return binding.replace(/([_+:+])/g, "$1\u200b");
+}
 
-function slotButton(id) {
+function svg(name, attrs, parent) {
+  const node = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+function hitGroup(id, parent) {
+  const g = svg("g", { class: "hit", tabindex: "0", role: "button", "data-id": id }, parent);
   const info = stored.get(id);
   const binding = staged.get(id);
-  const btn = document.createElement("button");
-  btn.className = "slot";
-  if (id === selected) btn.classList.add("selected");
-  if (binding !== info.binding) btn.classList.add("dirty");
-  btn.innerHTML =
-    `<span class="num">${info.group === "key" ? "Key " + id : ""}</span>` +
-    `<span class="bind"></span>`;
-  btn.querySelector(".bind").textContent = binding === "-" ? "unbound" : binding;
-  btn.title = info.label;
-  btn.onclick = () => { selected = id; render(); };
-  return btn;
+  if (id === selected) g.classList.add("selected");
+  if (info && binding !== info.binding) g.classList.add("dirty");
+  g.setAttribute("aria-label", `${info ? info.label : id}: ${face(binding) || "empty"}`);
+  return g;
 }
 
-function render() {
-  const keys = el("keys");
-  keys.replaceChildren();
-  for (let i = 1; i <= 12; i++) keys.appendChild(slotButton(String(i)));
-
-  const knobs = el("knobs");
-  knobs.replaceChildren();
-  const blank = document.createElement("div");
-  knobs.appendChild(blank);
-  for (const head of ["Turn left", "Press", "Turn right"]) {
-    const d = document.createElement("div");
-    d.className = "head";
-    d.textContent = head;
-    knobs.appendChild(d);
+function drawPad() {
+  const wrap = el("pad");
+  const root = svg("svg", { viewBox: "0 0 860 390", role: "group", "aria-label": "Macropad" });
+  svg("rect", { class: "pcb", x: 8, y: 8, width: 844, height: 374, rx: 22 }, root);
+  for (const [x, y] of [[24, 24], [820, 24], [24, 366], [820, 366]]) {
+    svg("circle", { class: "hole", cx: x, cy: y, r: 5 }, root);
   }
-  for (const [name, ids] of KNOB_ROWS) {
-    const side = document.createElement("div");
-    side.className = "side";
-    side.textContent = name;
-    knobs.appendChild(side);
-    for (const id of ids) knobs.appendChild(slotButton(id));
+  const silk = svg("text", { class: "silk", x: 430, y: 368, "text-anchor": "middle" }, root);
+  silk.textContent = "SY181P2R03003A";
+
+  for (const key of KEY_GEO) {
+    const g = hitGroup(key.id, root);
+    svg("rect", { class: "face", x: key.x, y: key.y, width: key.w, height: key.h, rx: 10 }, g);
+    const num = svg("text", { class: "keynum", x: key.x + 10, y: key.y + 16 }, g);
+    num.textContent = key.id;
+    const fo = svg("foreignObject", {
+      x: key.x + 6, y: key.y + 22, width: key.w - 12, height: key.h - 28,
+    }, g);
+    const div = document.createElement("div");
+    const text = face(staged.get(key.id));
+    div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    div.className = text ? "captext" : "captext empty";
+    div.textContent = text || "empty";
+    fo.appendChild(div);
   }
 
-  const dirty = [...staged].filter(([id, b]) => b !== stored.get(id).binding);
+  for (const knob of KNOBS) {
+    const name = svg("text", { class: "knob-name", x: 560, y: knob.cy - 46 }, root);
+    name.textContent = knob.name;
+    const xs = [500, 616, 732];
+    knob.parts.forEach((part, i) => {
+      const g = hitGroup(part.id, root);
+      const x = xs[i];
+      const y = knob.cy - 32;
+      svg("rect", { class: "face", x, y, width: 108, height: 74, rx: 12 }, g);
+      if (part.caption === "Press") {
+        svg("circle", { class: "knob-mark", cx: x + 90, cy: y + 16, r: 8 }, g);
+      }
+      const cap = svg("text", { class: "keynum", x: x + 8, y: y + 16 }, g);
+      cap.textContent = part.caption;
+      const fo = svg("foreignObject", { x: x + 4, y: y + 22, width: 100, height: 48 }, g);
+      const div = document.createElement("div");
+      div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+      const text = face(staged.get(part.id));
+      div.className = text ? "zonetext" : "zonetext empty";
+      div.textContent = text || "empty";
+      fo.appendChild(div);
+    });
+  }
+
+  root.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-id]");
+    if (g) selectSlot(g.getAttribute("data-id"));
+  });
+  root.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const g = e.target.closest("[data-id]");
+    if (!g) return;
+    e.preventDefault();
+    selectSlot(g.getAttribute("data-id"));
+  });
+  wrap.replaceChildren(root);
+}
+
+function selectSlot(id) {
+  if (!stored.has(id)) return;
+  selected = id;
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
+}
+
+function updateApply() {
+  const dirty = [...staged].filter(([id, b]) => stored.has(id) && b !== stored.get(id).binding);
   el("apply").disabled = dirty.length === 0;
   el("revert").disabled = dirty.length === 0;
   el("apply").textContent = dirty.length
     ? `Apply ${dirty.length} change${dirty.length > 1 ? "s" : ""}`
     : "Apply to pad";
-
-  showEditor();
 }
 
-// ===================================================================================
-// Editor
-// ===================================================================================
-
-const RAW_OPTION = "__raw__";
-
-function buildOptionLists() {
-  fill(el("keySelect"), options.keys);
-  const raw = document.createElement("option");
-  raw.value = RAW_OPTION;
-  raw.textContent = "custom HID usage...";
-  el("keySelect").appendChild(raw);
-  el("rawUsage").max = options.rawMax;
-  fill(el("conSelect"), options.consumer);
-  fill(el("mouseSelect"), options.mouseButtons.concat(options.mouseDeltas));
-
-  const mods = el("mods");
-  mods.replaceChildren();
-  for (const name of options.modifiers) {
-    const b = document.createElement("button");
-    b.textContent = name;
-    b.dataset.mod = name;
-    b.onclick = () => { b.classList.toggle("on"); commitEditor(); };
-    mods.appendChild(b);
-  }
-}
-
-function fill(select, values) {
-  select.replaceChildren();
-  for (const v of values) {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    select.appendChild(o);
-  }
-}
-
-// Parse a stored binding back into editor state, so selecting a slot shows what
-// it currently does rather than a blank form.
-// '+' is a key, so a binding may end in '++'. Splitting on every '+' would
-// turn that into an empty key name.
 function splitChord(binding) {
   if (binding === "+") return { mods: [], key: "+" };
   if (binding.endsWith("++")) {
@@ -225,115 +303,208 @@ function splitChord(binding) {
   return { mods: parts.filter(Boolean), key };
 }
 
-function ensureKeyOption(key) {
-  const select = el("keySelect");
-  if ([...select.options].some((o) => o.value === key)) return;
+function normalize(text) {
+  const t = (text || "").trim();
+  if (!t || /^(none|-|off|unbound)$/i.test(t)) return "-";
+  return t;
+}
+
+function display(binding) {
+  return !binding || binding === "-" ? "" : binding;
+}
+
+function bindingKind(binding) {
+  if (!binding || binding === "-") return "none";
+  if (!options) return "key";
+  if (options.consumer.includes(binding)) return "con";
+  if (options.mouseButtons.includes(binding)) return "mouse";
+  const base = binding.split(":")[0];
+  if (options.mouseDeltas.includes(base) && (binding === base || binding.includes(":")))
+    return "delta";
+  return "key";
+}
+
+function addOption(select, value, label) {
   const o = document.createElement("option");
-  o.value = key;
-  o.textContent = key;
+  o.value = value;
+  o.textContent = label;
   select.appendChild(o);
 }
 
+function consumerGroups() {
+  if (!options) return [];
+  const buckets = [
+    ["Volume and media", (n) => n.startsWith("VOL_") || n.startsWith("MEDIA_")],
+    ["Apps and browser", (n) => n.startsWith("APP_") || n.startsWith("WEB_")],
+    ["Brightness and power", (n) => n.startsWith("BRIGHT_") || n.startsWith("SYS_")],
+  ];
+  return buckets.map(([title, pred]) => [
+    title,
+    options.consumer.filter(pred).map((n) => [n, n.replaceAll("_", " ")]),
+  ]).filter(([, items]) => items.length);
+}
+
+function buildPickers() {
+  const mods = el("mods");
+  mods.replaceChildren();
+  for (const name of options.modifiers) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.textContent = name;
+    b.dataset.mod = name;
+    b.onclick = () => toggleMod(name);
+    mods.appendChild(b);
+  }
+
+  const fn = el("function");
+  fn.replaceChildren();
+  addOption(fn, "", "Type a key instead");
+  const groups = MANUAL_GROUPS.concat(consumerGroups(), [
+    ["Mouse buttons", options.mouseButtons.map((n) => [n, n.replaceAll("_", " ")])],
+    ["Scroll and pointer", options.mouseDeltas.map((n) => [n, n.replaceAll("_", " ")])],
+  ]);
+  for (const [title, items] of groups) {
+    const group = document.createElement("optgroup");
+    group.label = title;
+    for (const [value, label] of items) addOption(group, value, label);
+    fn.appendChild(group);
+  }
+  const rawGroup = document.createElement("optgroup");
+  rawGroup.label = "Raw position";
+  addOption(rawGroup, "__raw__", "Custom HID usage…");
+  fn.appendChild(rawGroup);
+  el("rawUsage").max = options.rawMax;
+}
+
+function previewText(binding) {
+  const shown = display(binding);
+  return shown || "nothing";
+}
+
+function syncPickers(binding) {
+  const fn = el("function");
+  const rawRow = el("rawRow");
+  const stepsRow = el("stepsRow");
+  const kind = bindingKind(binding);
+  rawRow.hidden = true;
+  stepsRow.hidden = true;
+  if (!fn.options.length) return;
+
+  const key = binding && binding !== "-" ? splitChord(binding).key : "";
+  if (key.toUpperCase().startsWith("RAW:")) {
+    fn.value = "__raw__";
+    rawRow.hidden = false;
+    el("rawUsage").value = key.slice(4);
+    return;
+  }
+  if (kind === "delta") {
+    const base = binding.split(":")[0];
+    fn.value = base;
+    stepsRow.hidden = false;
+    el("steps").value = parseInt(binding.split(":")[1] || "1", 10);
+    return;
+  }
+  if ([...fn.options].some((o) => o.value === binding)) {
+    fn.value = binding;
+    return;
+  }
+  fn.value = "";
+}
+
+function syncMods(binding) {
+  const kind = bindingKind(binding);
+  const mods = (kind === "key" || kind === "none") && binding && binding !== "-"
+    ? splitChord(binding).mods.map((m) => m.toLowerCase())
+    : [];
+  for (const b of el("mods").children) {
+    b.classList.toggle("on", mods.includes(b.dataset.mod));
+  }
+}
+
 function showEditor() {
-  const binding = staged.get(selected);
+  if (!selected || !stored.has(selected)) {
+    el("editor").hidden = true;
+    el("editorEmpty").hidden = false;
+    return;
+  }
+  el("editor").hidden = false;
+  el("editorEmpty").hidden = true;
   const info = stored.get(selected);
   el("editing").textContent = info.label;
-  el("editor").hidden = false;
-  el("preview").textContent = binding === "-" ? "nothing" : binding;
-
-  const base = binding.split(":")[0];
-  let kind = "key";
-  if (binding === "-") kind = "none";
-  else if (options.consumer.includes(binding)) kind = "con";
-  else if (options.mouseButtons.includes(binding) || options.mouseDeltas.includes(base))
-    kind = "mouse";
-  setKind(kind, false);
-
-  if (kind === "key") {
-    const { mods, key } = splitChord(binding);
-    for (const b of el("mods").children)
-      b.classList.toggle("on", mods.includes(b.dataset.mod));
-    if (key.startsWith("RAW:")) {
-      el("keySelect").value = RAW_OPTION;
-      el("rawUsage").value = key.slice(4);
-    } else {
-      ensureKeyOption(key);
-      el("keySelect").value = key;
-    }
-    el("rawRow").hidden = el("keySelect").value !== RAW_OPTION;
-  } else if (kind === "con") {
-    el("conSelect").value = binding;
-  } else if (kind === "mouse") {
-    el("mouseSelect").value = base;
-    const isDelta = options.mouseDeltas.includes(base);
-    el("stepsRow").hidden = !isDelta;
-    if (isDelta) el("steps").value = parseInt(binding.split(":")[1] || "1", 10);
+  const binding = staged.get(selected);
+  if (editorFor !== selected) {
+    el("binding").value = display(binding);
+    editorFor = selected;
+  }
+  el("preview").textContent = previewText(binding);
+  if (options) {
+    syncPickers(binding);
+    syncMods(binding);
   }
 }
 
-function setKind(kind, commit = true) {
-  for (const b of el("tabs").children)
-    b.classList.toggle("active", b.dataset.kind === kind);
-  for (const p of document.querySelectorAll(".pane"))
-    p.hidden = p.dataset.kind !== kind;
-  if (commit) commitEditor();
-}
-
-function activeKind() {
-  return el("tabs").querySelector(".active").dataset.kind;
-}
-
-// Build a binding string from the form. The server parses it, so the browser
-// never chooses raw numbers.
-function commitEditor() {
-  const kind = activeKind();
-  let binding = "none";
-
-  if (kind === "key") {
-    const mods = [...el("mods").children]
-      .filter((b) => b.classList.contains("on"))
-      .map((b) => b.dataset.mod);
-    let key = el("keySelect").value;
-    const isRaw = key === RAW_OPTION;
-    el("rawRow").hidden = !isRaw;
-    if (isRaw) {
-      const n = Math.max(1, Math.min(options.rawMax,
-                                     parseInt(el("rawUsage").value, 10) || 1));
-      key = `RAW:${n}`;
-    }
-    binding = mods.concat([key]).join("+");
-  } else if (kind === "con") {
-    binding = el("conSelect").value;
-  } else if (kind === "mouse") {
-    const choice = el("mouseSelect").value;
-    const isDelta = options.mouseDeltas.includes(choice);
-    el("stepsRow").hidden = !isDelta;
-    binding = choice;
-    if (isDelta) {
-      const n = Math.max(1, Math.min(127, parseInt(el("steps").value, 10) || 1));
-      binding = `${choice}:${n}`;
-    }
-  }
-
+function commitText(text, { fromField = false } = {}) {
+  if (!selected) return;
+  const binding = normalize(text);
   staged.set(selected, binding);
-  render();
+  drawPad();
+  updateApply();
+  el("preview").textContent = previewText(binding);
+  if (!fromField) el("binding").value = display(binding);
+  if (options) {
+    syncPickers(binding === "-" ? "" : binding);
+    syncMods(binding === "-" ? "" : binding);
+  }
 }
 
-// ===================================================================================
-// Actions
-// ===================================================================================
+function toggleMod(name) {
+  const kind = bindingKind(staged.get(selected));
+  if (kind === "con" || kind === "mouse" || kind === "delta") {
+    say("Modifiers belong on a key. Type ctrl+z, or pick a function below.");
+    return;
+  }
+  const text = el("binding").value.trim();
+  const { mods, key } = text ? splitChord(text) : { mods: [], key: "" };
+  const have = new Set(mods.map((m) => m.toLowerCase()));
+  if (have.has(name)) have.delete(name);
+  else have.add(name);
+  const ordered = options.modifiers.filter((m) => have.has(m));
+  const body = key && !options.modifiers.includes(key.toLowerCase()) ? key : "";
+  commitText(body ? [...ordered, body].join("+") : (ordered.length ? `${ordered.join("+")}+` : ""));
+}
+
+function onFunction() {
+  const value = el("function").value;
+  if (!value) return;
+  if (value === "__raw__") {
+    const n = Math.max(1, Math.min(options.rawMax, parseInt(el("rawUsage").value, 10) || 1));
+    el("rawUsage").value = n;
+    commitText(`RAW:${n}`);
+    return;
+  }
+  if (options.mouseDeltas.includes(value)) {
+    const n = Math.max(1, Math.min(127, parseInt(el("steps").value, 10) || 1));
+    el("steps").value = n;
+    commitText(`${value}:${n}`);
+    return;
+  }
+  commitText(value);
+}
 
 async function apply() {
   const changes = {};
   for (const [id, binding] of staged)
-    if (binding !== stored.get(id).binding) changes[id] = binding;
+    if (stored.has(id) && binding !== stored.get(id).binding) changes[id] = binding;
 
   say("Writing to the pad...");
   const res = await call("/api/apply", { changes });
   if (!res.ok) return say(res.error, "bad");
   adoptSlots(res.slots);
-  render();
-  say(`Stored on the pad. Bindings are kept when it is unplugged.`, "good");
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
+  say("Stored on the pad. Bindings are kept when it is unplugged.", "good");
 }
 
 function download() {
@@ -358,7 +529,10 @@ async function upload(file) {
     if (doc.format !== 2) throw new Error(`profile is format v${doc.format}, expected v2`);
     for (const [id, binding] of Object.entries(doc.bindings || {}))
       if (staged.has(id)) staged.set(id, binding);
-    render();
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
     say("Profile loaded. Press Apply to store it on the pad.");
   } catch (err) {
     say(`Could not read that profile: ${err.message}`, "bad");
@@ -371,21 +545,21 @@ function say(text, cls = "") {
   s.className = `status ${cls}`;
 }
 
-// ===================================================================================
-// Wiring
-// ===================================================================================
-
-el("tabs").onclick = (e) => { if (e.target.dataset.kind) setKind(e.target.dataset.kind); };
-el("keySelect").onchange = commitEditor;
-el("rawUsage").onchange = commitEditor;
-el("conSelect").onchange = commitEditor;
-el("mouseSelect").onchange = commitEditor;
-el("steps").onchange = commitEditor;
+el("binding").addEventListener("input", () => commitText(el("binding").value, { fromField: true }));
+el("function").onchange = onFunction;
+el("steps").onchange = onFunction;
+el("rawUsage").onchange = onFunction;
+el("clear").onclick = () => commitText("");
 
 el("capture").onclick = () => {
-  capturing = true;
-  el("capture").textContent = "Press a key...";
-  say("Listening for a keypress.");
+  capturing = !capturing;
+  el("capture").textContent = capturing ? "Listening…" : "Capture";
+  if (capturing) {
+    el("binding").blur();
+    say("Press a key. If nothing happens, the browser did not see it — type the name or use the list.");
+  } else {
+    say("Capture cancelled.");
+  }
 };
 
 el("layout").onchange = () => saveHost(el("layout").value, el("os").value);
@@ -396,7 +570,7 @@ window.addEventListener("keydown", async (e) => {
   if (!capturing) return;
   e.preventDefault();
   capturing = false;
-  el("capture").textContent = "Capture a keypress";
+  el("capture").textContent = "Capture";
 
   const res = await call("/api/capture", {
     key: KEY_FROM_BROWSER[e.key] || e.key,
@@ -407,26 +581,18 @@ window.addEventListener("keydown", async (e) => {
     altgr: e.getModifierState("AltGraph"),
   });
   if (!res.ok) return say(res.error, "bad");
-
-  const { mods, key } = splitChord(res.binding);
-  setKind("key", false);
-  for (const b of el("mods").children)
-    b.classList.toggle("on", mods.includes(b.dataset.mod));
-  if (key.startsWith("RAW:")) {
-    el("keySelect").value = RAW_OPTION;
-    el("rawUsage").value = key.slice(4);
-  } else {
-    ensureKeyOption(key);
-    el("keySelect").value = key;
-  }
-  commitEditor();
+  commitText(res.binding);
+  say(`Captured ${res.binding}.`, "good");
 });
 
 el("apply").onclick = apply;
 el("reload").onclick = refresh;
 el("revert").onclick = () => {
   for (const [id, info] of stored) staged.set(id, info.binding);
-  render();
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
   say("Changes discarded.");
 };
 el("defaults").onclick = async () => {
@@ -434,17 +600,25 @@ el("defaults").onclick = async () => {
   const res = await call("/api/reset", {});
   if (!res.ok) return say(res.error, "bad");
   adoptSlots(res.slots);
-  render();
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
   say("Defaults restored.", "good");
 };
 el("boot").onclick = async () => {
   if (!confirm("Reboot the pad into its bootloader for reflashing?")) return;
   const res = await call("/api/bootloader", {});
-  say(res.ok ? "In the ROM bootloader for a few seconds. If chflash is not already waiting, run it and click again: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30 (full image, 13296 bytes)."
-             : res.error, res.ok ? "good" : "bad");
+  say(res.ok
+    ? "In the ROM bootloader for a few seconds. If chflash is not already waiting, run it and click again: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30 (full image, 13296 bytes)."
+    : res.error, res.ok ? "good" : "bad");
 };
 el("save").onclick = download;
 el("load").onclick = () => el("file").click();
 el("file").onchange = (e) => { if (e.target.files[0]) upload(e.target.files[0]); };
 
+adoptSlots(blankSlots());
+selected = "1";
+drawPad();
+showEditor();
 refresh();

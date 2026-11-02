@@ -178,6 +178,9 @@ def _de_ascii() -> dict[int, tuple[int, int]]:
         0x30: _plain(0x27),
         0x3A: _shift(0x37),  # :
         0x3B: _shift(0x36),  # ;
+        # "<" is the character. The named key nonus_backslash is HID 0x64
+        # directly and does not go through this table. On German the two
+        # reports match, because this key is where "<" lives.
         0x3C: _plain(0x64),  # <
         0x3D: _shift(0x27),  # =
         0x3E: _shift(0x64),  # >
@@ -233,6 +236,8 @@ def _fr_ascii() -> dict[int, tuple[int, int]]:
         0x39: _shift(0x26),
         0x3A: _plain(0x37),   # :
         0x3B: _plain(0x36),   # ;
+        # Same key as German: the character "<" is HID 0x64 here, and the
+        # named nonus_backslash binding is that usage with no layout lookup.
         0x3C: _plain(0x64),   # <
         0x3D: _plain(0x2E),   # =
         0x3E: _shift(0x64),   # >

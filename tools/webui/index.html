@@ -9,12 +9,15 @@
 <body>
 
 <header>
-  <h1>Macropad configurator</h1>
+  <div>
+    <h1>Macropad</h1>
+    <p class="tag">Twelve keys, two knobs. Click one, then say what it should do.</p>
+  </div>
   <div id="device" class="device">Connecting...</div>
 </header>
 
 <div class="hostbar" id="hostbar" hidden>
-  <label>Computer
+  <label>Keyboard
     <select id="layout"></select>
   </label>
   <label>System
@@ -25,103 +28,71 @@
 </div>
 
 <main>
-  <section class="panel">
-    <h2>Keys</h2>
-    <div id="keys" class="grid"></div>
-
-    <h2>Knobs</h2>
-    <div id="knobs" class="knobs"></div>
-
-    <h2>Firmware</h2>
-    <p class="hint">
-      Chrome and Edge update a pad that is already running 1.2.0. Firmware
-      1.0.0 and 1.1.0 have no updater command. Connect names that firmware and
-      the one-time chflash of <code>padfw-1.2.0.bin</code> (13296 bytes).
-    </p>
-    <div class="update-row">
-      <button id="fwConnect" type="button">Connect pad</button>
-      <input id="fwFile" type="file" accept=".bin,application/octet-stream">
-      <button id="fwGo" class="primary" type="button" disabled>Update firmware</button>
-    </div>
-    <progress id="fwProgress" max="1" value="0"></progress>
-    <p id="fwNote" class="hint">Choose the rebuilt <code>padfw-1.2.0.web.bin</code>, not the full recovery file and not an older .web.bin.</p>
+  <section class="stage">
+    <div id="pad" class="pad-wrap"></div>
+    <p class="legend">Key 1 is the top-left key, the one held for the bootloader. Knobs are on the right: turn left, press, turn right.</p>
   </section>
 
   <section class="panel editor">
     <h2 id="editing">Select a key</h2>
-
     <div id="editor" hidden>
-      <div class="tabs" id="tabs">
-        <button data-kind="key" class="active">Keyboard</button>
-        <button data-kind="con">Media &amp; apps</button>
-        <button data-kind="mouse">Mouse</button>
-        <button data-kind="none">Unbound</button>
+      <label for="binding">Type or capture</label>
+      <div class="bindrow">
+        <input id="binding" type="text" autocomplete="off" spellcheck="false"
+               placeholder="a, @, ctrl+z, enter">
+        <button id="capture" type="button">Capture</button>
+      </div>
+      <div id="mods" class="mods"></div>
+      <p class="hint">
+        A character is stored as that character, so @ and Ctrl+Z follow the
+        keyboard chosen above. Capture only hears keys the browser reports.
+        The Windows key often never arrives; type <code>win+e</code> or tick Win.
+      </p>
+
+      <label for="function">Media, mouse, keypad, system</label>
+      <select id="function"></select>
+      <div id="stepsRow" hidden>
+        <label for="steps">Steps per press</label>
+        <input id="steps" type="number" min="1" max="127" value="1">
+      </div>
+      <div id="rawRow" hidden>
+        <label for="rawUsage">HID usage (1–119)</label>
+        <input id="rawUsage" type="number" min="1" max="119" value="100">
+        <p class="hint">Sends that key position and skips layout translation. <code>nonus_backslash</code> is usage 0x64.</p>
       </div>
 
-      <div class="pane" data-kind="key">
-        <label>Modifiers</label>
-        <div id="mods" class="mods"></div>
-        <label for="keySelect">Key</label>
-        <select id="keySelect"></select>
-
-        <div id="rawRow" hidden>
-          <label for="rawUsage">HID usage number</label>
-          <input id="rawUsage" type="number" min="1" max="119" value="52">
-          <p class="hint">
-            Sends that key position and ignores the computer's layout. Use it
-            for a key that has no name here. Named characters and shortcuts
-            above already follow the layout selected at the top.
-          </p>
-        </div>
-
-        <button id="capture" class="ghost">Capture a keypress</button>
-        <p class="hint">
-          A captured character is stored as that character, so <em>@</em> and
-          Ctrl+Z come out right on US, UK, German and French computers. Set
-          the computer's layout above; the pad cannot see it by itself.
-        </p>
-        <p class="hint">
-          Windows handles some chords itself and will not pass them on, the
-          Windows key especially. Tick the modifiers by hand for those.
-        </p>
-      </div>
-
-      <div class="pane" data-kind="con" hidden>
-        <label for="conSelect">Action</label>
-        <select id="conSelect"></select>
-        <p class="hint">
-          Standard consumer controls. No driver or background software is
-          needed; the desktop acts on these directly.
-        </p>
-      </div>
-
-      <div class="pane" data-kind="mouse" hidden>
-        <label for="mouseSelect">Action</label>
-        <select id="mouseSelect"></select>
-        <div id="stepsRow" hidden>
-          <label for="steps">Steps per press</label>
-          <input id="steps" type="number" min="1" max="127" value="1">
-        </div>
-      </div>
-
-      <div class="pane" data-kind="none" hidden>
-        <p class="hint">This slot will do nothing at all.</p>
-      </div>
-
-      <div class="preview">Sends: <strong id="preview">-</strong></div>
+      <button id="clear" class="texty" type="button">Clear this key</button>
+      <div class="preview">Sends <strong id="preview">nothing</strong></div>
     </div>
+    <p id="editorEmpty" class="hint">Click a key or a side of a knob.</p>
   </section>
 </main>
 
+<details class="firmware">
+  <summary>Firmware update</summary>
+  <p class="hint">
+    Chrome and Edge update a pad that is already running 1.2.0. Firmware
+    1.0.0 and 1.1.0 have no updater command. Connect names that firmware and
+    the one-time chflash of <code>padfw-1.2.0.bin</code> (13296 bytes).
+  </p>
+  <div class="update-row">
+    <button id="fwConnect" type="button">Connect pad</button>
+    <input id="fwFile" type="file" accept=".bin,application/octet-stream">
+    <button id="fwGo" class="primary" type="button" disabled>Update firmware</button>
+  </div>
+  <progress id="fwProgress" max="1" value="0"></progress>
+  <p id="fwNote" class="hint">After the pad is on 1.2.0, choose the rebuilt <code>padfw-1.2.0.web.bin</code>.</p>
+</details>
+
 <footer>
   <button id="apply" class="primary" disabled>Apply to pad</button>
-  <button id="revert" disabled>Discard changes</button>
-  <button id="reload">Reload from pad</button>
+  <button id="revert" disabled>Discard</button>
+  <button id="reload">Reload</button>
   <span class="spacer"></span>
   <button id="save">Save profile</button>
   <button id="load">Load profile</button>
-  <button id="defaults" class="danger">Restore defaults</button>
-  <button id="boot" class="danger">Reboot to bootloader</button>
+  <button id="defaults" class="danger">Defaults</button>
+  <button id="boot" class="danger">Bootloader</button>
   <input id="file" type="file" accept="application/json" hidden>
 </footer>
 

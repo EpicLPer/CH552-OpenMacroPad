@@ -16,29 +16,36 @@ it can rebind keys and reboot the device.
 
 ## The configurator
 
-The twelve keys and the six knob actions each appear as a button showing what
-they currently do. Click one, choose a binding on the right, and the button
-updates.
+The page draws the pad: twelve keys in three rows of four, and the two knobs
+on the right. Each key shows its action. Each knob shows turn-left, press and
+turn-right. Click one to edit it.
 
-Nothing is written to the pad until **Apply** is pressed. Slots you have changed
-are marked with an asterisk, and only those get written. This is not just
-tidiness: every write costs a data-flash cycle, and staging the edits keeps
-clicking around from consuming them.
+The binding box is where a character or shortcut goes. Type `a`, `@` or
+`ctrl+z`, or press **Capture** and hit the key. Capture only receives keys
+the browser actually reports. The Windows key is a common miss, so type
+`win+e` or tick **win**. The list under the box is only for things capture
+cannot be trusted with: media keys, mouse actions, the keypad, F13–F24,
+system keys and a raw HID usage. It is not a list of every character.
 
-The other controls:
+`nonus_backslash` in that list is the ISO key, HID usage `0x64`, not the
+character `<`. German and French type `<` on that key with no shift, so the
+two bindings look the same there. On US and UK, `<` is Shift+comma.
+
+Nothing is written to the pad until **Apply** is pressed. A changed key is
+outlined, and only those slots are written. Every write costs a data-flash
+cycle, so staging the edits keeps clicking around from consuming them.
+
+Firmware update is folded away at the bottom. It is the browser path for a
+pad already on 1.2.0.
 
 | Button | What it does |
 | --- | --- |
-| Apply to pad | Writes the changed slots. They persist across unplugging. |
-| Discard changes | Throws away edits, back to what the pad holds. |
-| Reload from pad | Re-reads the device, useful if you changed it elsewhere. |
+| Apply | Writes the changed slots. They persist across unplugging. |
+| Discard | Throws away edits, back to what the pad holds. |
+| Reload | Re-reads the device, useful if you changed it elsewhere. |
 | Save / Load profile | JSON files, for backups and for sharing layouts. |
-| Restore defaults | F13&ndash;F24 on the keys, volume and media on the knobs. |
-| Reboot to bootloader | Recovery path. Normal updates use the Firmware section instead. |
-
-The **Capture a keypress** button fills in whatever you press. Windows
-intercepts some combinations before the browser sees them, the Windows key in
-particular, so tick those modifiers by hand instead.
+| Defaults | F13&ndash;F24 on the keys, volume and media on the knobs. |
+| Bootloader | Recovery path. Normal updates use the Firmware section instead. |
 
 ## The command line
 

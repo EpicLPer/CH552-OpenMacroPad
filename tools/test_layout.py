@@ -111,12 +111,32 @@ def test_known_chords() -> None:
     check("UK hash key", hold(LAY_UK, "#").hid, 0x32)
     check("DE hash key", hold(LAY_DE, "#").hid, 0x32)
 
+    # nonus_backslash is the ISO key (HID 0x64), not the character "<".
+    # German and French type "<" on that key, so the glyph matches there.
+    # US and UK type "<" with Shift+comma.
+    nonus = parse("nonus_backslash")
+    check("nonus stored as raw HID 0x64", nonus.code, 136 + 0x64)
+    check("character < is not that raw code", parse("<").code, ord("<"))
+    for layout, name in ((LAY_US, "US"), (LAY_UK, "UK"), (LAY_DE, "DE"), (LAY_FR, "FR")):
+        got = plan(layout, OS_WIN, nonus.code, 0)
+        check(f"{name} nonus is usage 0x64", (got.kind, got.hid, got.mods),
+              (PLAN_HOLD, 0x64, 0))
+    check("US < is shift+comma", (hold(LAY_US, "<").hid, hold(LAY_US, "<").mods),
+          (0x36, MOD_LSHIFT))
+    check("UK < is shift+comma", (hold(LAY_UK, "<").hid, hold(LAY_UK, "<").mods),
+          (0x36, MOD_LSHIFT))
+    check("DE < is the non-us key", (hold(LAY_DE, "<").hid, hold(LAY_DE, "<").mods),
+          (0x64, 0))
+    check("FR < is the non-us key", (hold(LAY_FR, "<").hid, hold(LAY_FR, "<").mods),
+          (0x64, 0))
+
 
 def test_bindings_round_trip() -> None:
     samples = [
         "ctrl+z", "ctrl+Z", "ctrl+shift+z", "win+e", "@", "ä", "Ä", "€",
         "+", "ctrl++", "shift+2", "F13", "RAW:52", "SCROLL_DOWN:3",
         "none", "space", "altgr+q", "MOUSE_BACK", "VOL_UP",
+        "nonus_backslash", "<", "shift+nonus_backslash",
     ]
     for spec in samples:
         action = parse(spec)
@@ -147,6 +167,7 @@ def test_capture() -> None:
     check("f-key", capture_binding("F13"), "f13")
     check("escape", capture_binding("Escape"), "esc")
     check("auml", capture_binding("ä"), "ä")
+    check("less-than stays the character", capture_binding("<", shift=True), "<")
 
 
 def test_profile_byte() -> None:
@@ -183,6 +204,8 @@ def test_firmware_planner_matches() -> None:
                 cases.append((layout, os_id, 0x8000 | cp, 0))
     cases.append((LAY_US, OS_WIN, 0xF0, 0))          # F13
     cases.append((LAY_DE, OS_WIN, 0xB1, MOD_LCTRL))  # ctrl+esc, raw position
+    for layout in range(4):
+        cases.append((layout, OS_WIN, 136 + 0x64, 0))  # nonus_backslash
     blob = "".join(f"{a} {b} {c} {d}\n" for a, b, c, d in cases)
     out = subprocess.run([str(binary), "-b"], input=blob, text=True,
                          capture_output=True, check=True)

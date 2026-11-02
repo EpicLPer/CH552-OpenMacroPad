@@ -12,6 +12,12 @@ which is noted explicitly below when it happens.
 Storage format is still 2. A pad running 1.1.0 keeps its bindings and its
 layout setting.
 
+- The configurator draws the twelve keys and two knobs. A binding is typed
+  or captured. Media, mouse, keypad and system keys stay in their own list.
+- `nonus_backslash` is HID usage 0x64, the ISO key. German and French type
+  `<` on that key. The character `<` is still its own binding, which is
+  Shift+comma on US and UK.
+
 - Firmware updates after this version go over the vendor HID collection, from
   the configurator in Chrome or Edge. No Zadig and no bootloader driver.
   The image is `padfw-1.2.0.web.bin`. The USB stack that receives it is not

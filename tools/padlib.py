@@ -112,6 +112,10 @@ KEYPAD = {
 }
 KEYPAD.update({f"kp_{n}": 0x58 + n for n in range(1, 10)})
 
+# Usages, added to RAW_BASE below. nonus_backslash is HID 0x64 (Keyboard
+# Non-US \ and |, the ISO key beside Left Shift). It is not the character
+# "<": German and French type "<" on that key, US and UK type "<" with
+# Shift+comma. The character stays its own binding.
 SYSTEM_KEYS = {
     "printscreen": 0x46, "scrolllock": 0x47, "pause": 0x48,
     "menu": 0x65, "power": 0x66, "nonus_backslash": 0x64,
