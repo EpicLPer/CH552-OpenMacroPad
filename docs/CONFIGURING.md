@@ -34,7 +34,7 @@ The other controls:
 | Reload from pad | Re-reads the device, useful if you changed it elsewhere. |
 | Save / Load profile | JSON files, for backups and for sharing layouts. |
 | Restore defaults | F13&ndash;F24 on the keys, volume and media on the knobs. |
-| Reboot to bootloader | For flashing an update, with no jumper needed. |
+| Reboot to bootloader | Recovery path. Normal updates use the Firmware section instead. |
 
 The **Capture a keypress** button fills in whatever you press. Windows
 intercepts some combinations before the browser sees them, the Windows key in

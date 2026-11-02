@@ -71,10 +71,12 @@ and the knobs handle volume and media playback.
 
 ## Getting started
 
-1. **Flash the firmware.** A prebuilt binary is in
-   [`firmware/prebuilt/`](firmware/prebuilt), so no compiler is needed.
-   Follow [`docs/FLASHING.md`](docs/FLASHING.md), which covers the Zadig driver
-   setup on Windows.
+1. **Flash the firmware.** The first install, and the one-time step up from
+   firmware 1.0.0 or 1.1.0, uses a prebuilt image in
+   [`firmware/prebuilt/`](firmware/prebuilt). Follow
+   [`docs/FLASHING.md`](docs/FLASHING.md). After 1.2.0 is on the pad, later
+   updates are sent from the configurator in Chrome or Edge and do not need
+   Zadig.
 
 2. **Configure it.**
 

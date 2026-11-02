@@ -102,6 +102,17 @@ Codes with bit 15 set are Unicode scalars; codes from 136 are raw HID usages
 and are not translated. A character the layout cannot type is an Alt+numpad
 sequence on Windows or Ctrl+Shift+U on Linux.
 
+## Firmware update
+
+The browser updater writes only `0x0000`-`0x1FFF`. `0x2000` stages the new
+reset page and `0x2400`-`0x37FF` is the USB stack plus the writer, installed
+by `chflash` and not replaced by a `.web.bin`. `firmware/iapvec.asm` is the
+six-byte jump table at `0x2400`. Reset and the USB vector in page 0 are
+patched to those fixed addresses so a later image still lands in the resident
+code. Data-flash byte 127 is `0x00` while an update has erased application
+pages; the reset stub then stays in the updater instead of jumping at a
+half-written image. `tools/test_iap.py` checks the image layout.
+
 Action types are unbound, keyboard, consumer and mouse. Keyboard actions carry a
 bitmask of the eight modifiers, so any chord is expressible. Mouse actions split
 the code into a subtype and a signed delta, covering the five buttons, the

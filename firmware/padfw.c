@@ -25,11 +25,7 @@
 #include "src/usb_mouse.h"
 #include "src/padcfg.h"
 #include "src/layout.h"
-
-void USB_interrupt(void);
-void USB_ISR(void) __interrupt(INT_NO_USB) {
-  USB_interrupt();
-}
+#include "src/iap.h"
 
 #pragma disable_warning 110
 
@@ -230,6 +226,7 @@ void main(void) {
 
   PADCFG_init();
   TM1650_init();
+  iap_mode = 0;
   KBD_init();
   MOUSE_init();
   for(i = 0; i < ACT_COUNT; i++) clearHold(i);

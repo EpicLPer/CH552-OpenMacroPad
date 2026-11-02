@@ -11,6 +11,7 @@
 #include "usb_descr.h"
 #include "usb_handler.h"
 #include "usb_hid.h"
+#include "iap.h"
 
 __xdata action_t Keymap[ACT_COUNT];
 
@@ -215,6 +216,12 @@ void PADCFG_task(void) {
   reply[0] = CFG_REPORT_ID;
   reply[1] = cmdBuf[1];                         // echo the command
   idx = cmdBuf[2];
+
+  if(cmdBuf[1] >= CMD_IAP_INFO && cmdBuf[1] <= CMD_IAP_ABORT) {
+    cmdPending = 0;
+    IAP_from_app(cmdBuf);
+    return;
+  }
 
   switch(cmdBuf[1]) {
     case CMD_GET_INFO:

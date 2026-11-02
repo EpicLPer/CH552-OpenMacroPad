@@ -7,13 +7,25 @@
 #include "usb_hid.h"
 #include "usb_descr.h"
 #include "usb_handler.h"
+#include "usb_conkbd.h"
 #include "padcfg.h"
+#include "iap.h"
 
 // ===================================================================================
 // Variables and Defines
 // ===================================================================================
 
 volatile __bit HID_EP1_writeBusyFlag = 0;                   // upload pointer busy flag
+
+// Defined here, next to the endpoint handler, so the LED latch is not erased
+// while an update is running. KBD_getState in the application reads them.
+__xdata uint8_t KBD_ledState = 0;
+__xdata uint8_t KBD_ledValid = 0;
+
+void KBD_noteLeds(uint8_t leds) {
+  KBD_ledState = leds;
+  KBD_ledValid = 1;
+}
 
 // ===================================================================================
 // Front End Functions
@@ -67,5 +79,15 @@ void HID_EP1_IN(void) {
 
 // Endpoint 2 OUT handler (HID report transfer from host)
 void HID_EP2_OUT(void) {                                    // auto response
+  uint8_t i;
+  if(EP2_buffer[0] == 1) KBD_noteLeds(EP2_buffer[1]);
+  // Once an update starts, the application that owns the config task may be
+  // erased. Packets stay in the resident buffer and the updater answers them.
+  if(iap_mode) {
+    if(EP2_buffer[0] != CFG_REPORT_ID || iap_pkt_ready) return;
+    for(i = 0; i < 16; i++) iap_pkt[i] = EP2_buffer[i];
+    iap_pkt_ready = 1;
+    return;
+  }
   PADCFG_onReport();                                        // may be a keymap command
 }

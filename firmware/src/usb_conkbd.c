@@ -17,8 +17,6 @@
 // only in this initialiser is not something to rely on.
 __xdata uint8_t  KBD_report[9] = {1,0,0,0,0,0,0,0,0};
 __xdata uint8_t  CON_report[9] = {2,0,0,0,0,0,0,0,0};
-__xdata uint8_t  KBD_ledState = 0;
-__xdata uint8_t  KBD_ledValid = 0;
 
 void KBD_init(void) {
   uint8_t i;
@@ -31,11 +29,6 @@ void KBD_init(void) {
   }
   KBD_ledState = 0;
   KBD_ledValid = 0;
-}
-
-void KBD_noteLeds(uint8_t leds) {
-  KBD_ledState = leds;
-  KBD_ledValid = 1;
 }
 
 void KBD_sync(uint8_t mods, uint8_t *hids, uint8_t n) {

@@ -58,6 +58,12 @@ h2 { font-size: 12px; text-transform: uppercase; letter-spacing: .08em;
 .hostbar .hint { margin: 0; }
 .hostbar .hint.warn { color: var(--dirty); }
 
+.update-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+#fwProgress { width: 100%; height: 8px; margin-top: 10px; }
+#fwNote.warn { color: var(--dirty); }
+#fwNote.bad { color: var(--danger); }
+#fwNote.good { color: var(--ok); }
+
 main {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 340px;

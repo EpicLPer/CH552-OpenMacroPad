@@ -124,6 +124,70 @@ def ihx_to_bin(ihx: Path, out: Path) -> int:
     return len(data)
 
 
+RESIDENT_AREAS = (".area CSEG    (CODE)", ".area CONST   (CODE)")
+
+
+def compile_resident(sdcc: str, cflags: list[str], source: Path, rel: Path) -> None:
+    """Assemble this file into the RESIDENT area instead of CSEG/CONST.
+
+    SDCC 4.2 has no working codeseg pragma, so the area name is rewritten in
+    the generated assembly. HOME (the interrupt vector table) is left alone.
+    """
+    asm = rel.with_suffix(".asm")
+    run([sdcc, "-S", *cflags, str(source), "-o", str(asm)])
+    text = asm.read_text()
+    rewritten = text.replace(".area CSEG    (CODE)", ".area RESIDENT (REL,CON,CODE)")
+    rewritten = rewritten.replace(".area CONST   (CODE)", ".area RESIDENT (REL,CON,CODE)")
+    if rewritten == text:
+        sys.exit(f"error: {source.name} did not contain a CSEG/CONST area to move")
+    asm.write_text(rewritten)
+    run(["sdas8051", "-plosgff", str(asm)])
+    produced = asm.with_suffix(".rel")
+    if produced != rel:
+        produced.replace(rel)
+
+
+def low_image_end(ihx: Path) -> int:
+    """First address not occupied by the application image below the staging page."""
+    end = 0
+    for line in ihx.read_text().splitlines():
+        if not line.startswith(":"):
+            continue
+        raw = bytes.fromhex(line[1:])
+        count, addr, rtype = raw[0], (raw[1] << 8) | raw[2], raw[3]
+        if rtype != 0x00:
+            continue
+        if addr >= 0x2000:
+            continue
+        end = max(end, addr + count)
+    return end
+
+
+def check_link_map(mem: Path) -> None:
+    text = mem.read_text(errors="replace")
+    if "RESIDENT" not in text:
+        sys.exit("error: RESIDENT area missing from the link map")
+    for line in text.splitlines():
+        if line.startswith("RESIDENT") and "=" not in line.split()[0]:
+            parts = line.split()
+            base = int(parts[1], 16)
+            size = int(parts[2], 16)
+            if base < 0x2406 or base + size > 0x3800:
+                sys.exit(f"error: RESIDENT at 0x{base:04X} size {size} escapes 0x2406-0x3800")
+            print(f"RESIDENT: {size} bytes at 0x{base:04X}")
+
+
+def bin_to_ihx(blob: bytes, out: Path) -> None:
+    lines = []
+    for addr in range(0, len(blob), 16):
+        chunk = blob[addr:addr + 16]
+        body = bytes([len(chunk), (addr >> 8) & 0xFF, addr & 0xFF, 0x00]) + chunk
+        checksum = ((~sum(body) + 1) & 0xFF)
+        lines.append(":" + body.hex().upper() + f"{checksum:02X}")
+    lines.append(":00000001FF")
+    out.write_text("\n".join(lines) + "\n")
+
+
 def report_size(mem: Path) -> None:
     if not mem.exists():
         return
@@ -177,24 +241,57 @@ def main() -> None:
 
     # The sketch is compiled first so its module leads the link, matching the
     # upstream makefile.
+    # USB and the updater are linked into the resident area at the top of
+    # flash. A browser update never erases that area, so the reset stub can
+    # still reach the ROM bootloader if the application image is incomplete.
+    resident_names = {
+        "iap.c", "usb_handler.c", "usb_hid.c", "usb_descr.c",
+    }
     sources = [sketch] + sorted(SRC.glob("*.c"))
     rels = []
     for source in sources:
         rel = BUILD / (source.stem + ".rel")
         print(f"Compiling {source.name} ...")
-        run([sdcc, "-c", *cflags, str(source), "-o", str(rel)])
+        if source.name in resident_names:
+            compile_resident(sdcc, cflags, source, rel)
+        else:
+            run([sdcc, "-c", *cflags, str(source), "-o", str(rel)])
         rels.append(rel)
+
+    vec_asm = BUILD / "iapvec.asm"
+    vec = BUILD / "iapvec.rel"
+    print("Assembling iapvec.asm ...")
+    vec_asm.write_text((ROOT / "iapvec.asm").read_text())
+    run(["sdas8051", "-plosgff", str(vec_asm)])
+    rels.insert(0, vec)
 
     ihx = BUILD / f"{target}.ihx"
     print(f"Linking {ihx.name} ...")
-    run([sdcc, *[str(r) for r in rels], *cflags, "-o", str(ihx)])
+    run([sdcc, *[str(r) for r in rels], *cflags,
+         "-Wl-bRESIDENT=0x2406", "-o", str(ihx)])
 
     hexfile = ROOT / f"{target}.hex"
     binfile = ROOT / f"{target}.bin"
-    with hexfile.open("w") as fh:
-        subprocess.run([packihx, str(ihx)], stdout=fh, stderr=subprocess.DEVNULL,
-                       check=True, cwd=ROOT)
     size = ihx_to_bin(ihx, binfile)
+    if target == "padfw":
+        # Stable trampolines. A later browser update rewrites these three-byte
+        # jumps and must keep landing on the resident area installed by chflash.
+        blob = bytearray(binfile.read_bytes())
+        blob[0x00:0x03] = bytes((0x02, 0x24, 0x00))
+        blob[0x40:0x43] = bytes((0x02, 0x24, 0x03))
+        binfile.write_bytes(blob)
+        web_end = low_image_end(ihx)
+        if web_end > 0x2000:
+            sys.exit(f"error: application image is {web_end} bytes, limit is 8192")
+        web = ROOT / "padfw.web.bin"
+        web.write_bytes(blob[:web_end])
+        check_link_map(BUILD / f"{target}.map")
+        bin_to_ihx(blob, hexfile)
+        print(f"Web update image {web.name} ({web_end} bytes)")
+    else:
+        with hexfile.open("w") as fh:
+            subprocess.run([packihx, str(ihx)], stdout=fh, stderr=subprocess.DEVNULL,
+                           check=True, cwd=ROOT)
 
     report_size(BUILD / f"{target}.mem")
     print(f"Wrote {binfile.name} ({size} bytes) and {hexfile.name}")

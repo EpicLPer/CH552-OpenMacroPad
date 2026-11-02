@@ -7,6 +7,21 @@ The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
 which is noted explicitly below when it happens.
 
+## 1.2.0
+
+Storage format is still 2. A pad running 1.1.0 keeps its bindings and its
+layout setting.
+
+- Firmware updates after this version go over the vendor HID collection, from
+  the configurator in Chrome or Edge. No Zadig and no bootloader driver.
+  The image is `padfw-1.2.0.web.bin`. The USB stack that receives it is not
+  inside that file.
+- Getting onto 1.2.0 from 1.0.0 or 1.1.0 is still `chflash.py` and, on Windows,
+  Zadig once. Those builds cannot write their own program flash.
+- A transfer that stops early leaves the reset page alone, so holding the
+  top-left key still enters the ROM bootloader. The new reset page is copied
+  only after the rest of the image has been checked.
+
 ## 1.1.0
 
 Storage format is still 2. Existing bindings are kept.

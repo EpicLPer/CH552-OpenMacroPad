@@ -440,7 +440,7 @@ el("defaults").onclick = async () => {
 el("boot").onclick = async () => {
   if (!confirm("Reboot the pad into its bootloader for reflashing?")) return;
   const res = await call("/api/bootloader", {});
-  say(res.ok ? "In the bootloader. Run: python tools\\chflash.py padfw.bin --wait 30"
+  say(res.ok ? "In the ROM bootloader. That is the recovery path: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30"
              : res.error, res.ok ? "good" : "bad");
 };
 el("save").onclick = download;

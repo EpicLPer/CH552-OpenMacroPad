@@ -1,14 +1,43 @@
 # Flashing
 
 The CH552 has a bootloader in ROM that cannot be erased. A bad flash is
-recoverable, so there is no realistic way to brick the board by writing the
-wrong firmware to it.
+recoverable. From firmware 1.2.0 onward the normal update does not use that
+bootloader at all: the configurator sends the new image over the same vendor
+HID channel used to change bindings, and the pad writes it itself.
+
+## Updating a pad that already runs 1.2.0 or newer
+
+1. Open the configurator in Chrome or Edge (`python tools/padweb.py`).
+2. Under **Firmware**, connect the pad and choose `firmware/prebuilt/padfw-1.2.0.web.bin`.
+3. Press **Update firmware** and leave the cable in until the pad reboots.
+
+No Zadig, no libusb, and no `chflash.py`. The `.web.bin` is the application
+only. The USB stack that receives it lives above that image and is not
+rewritten. Bindings in data flash are kept.
+
+If the transfer stops after it has started erasing, unplug and replug. The
+pad comes back as a keyboard that only accepts another update (hold the
+top-left key while plugging in if you would rather reach the ROM bootloader
+instead). Send the `.web.bin` again. The reset page is replaced last, so a
+failed transfer still has the key-1 path.
+
+The one case that does need `chflash` again is a power loss in the few
+milliseconds while that reset page is being copied. The pad then enumerates
+as the WCH bootloader (`4348:55E0`) instead of a keyboard. Use the recovery
+steps below with the **full** `padfw-1.2.0.bin`, not the `.web.bin`.
+
+## First install, and the one-time step from 1.0.0 or 1.1.0
+
+Firmware 1.0.0 and 1.1.0 can reboot into the ROM bootloader, but they cannot
+write their own program flash. The first jump to 1.2.0 is still `chflash.py`.
+Every later update can be the browser path above.
 
 Be aware of one thing before starting: **the stock firmware cannot be backed
 up.** The bootloader has no read command, and the verify command cannot be
 abused as a substitute (it answers only once per session and does not
-distinguish a match from a mismatch usefully). Flashing this firmware is a
-one-way trip. The stock configuration tool will no longer work with the pad.
+distinguish a match from a mismatch usefully). Flashing this firmware over
+the stock image is a one-way trip. The stock configuration tool will no
+longer work with the pad.
 
 ## 1. Install the prerequisites
 
@@ -81,7 +110,7 @@ handing over to the firmware, which is why the flashing command below takes a
 ## 4. Flash
 
 ```
-python tools/chflash.py firmware/prebuilt/padfw-1.1.0.bin --wait 30
+python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30
 ```
 
 Run that, then trigger the bootloader by whichever method above. Expected
@@ -91,7 +120,7 @@ output:
 Waiting up to 30s for the bootloader. Plug the cable in now ...
 Connected via the libusb-win32 backend.
 Chip 0x52, bootloader v2.40
-Flashing padfw-1.1.0.bin (9536 bytes)
+Flashing padfw-1.2.0.bin (the full recovery image)
 Done. The pad restarts on the new firmware.
 ```
 

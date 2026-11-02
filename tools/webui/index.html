@@ -31,6 +31,20 @@
 
     <h2>Knobs</h2>
     <div id="knobs" class="knobs"></div>
+
+    <h2>Firmware</h2>
+    <p class="hint">
+      Chrome and Edge can send an update straight to the pad. No Zadig and no
+      bootloader driver. Firmware 1.0.0 and 1.1.0 cannot do this; they need the
+      one-time flash in the docs first.
+    </p>
+    <div class="update-row">
+      <button id="fwConnect" type="button">Connect pad</button>
+      <input id="fwFile" type="file" accept=".bin,application/octet-stream">
+      <button id="fwGo" class="primary" type="button" disabled>Update firmware</button>
+    </div>
+    <progress id="fwProgress" max="1" value="0"></progress>
+    <p id="fwNote" class="hint">Choose the <code>.web.bin</code> image, not the full recovery file.</p>
   </section>
 
   <section class="panel editor">
@@ -114,5 +128,6 @@
 <div id="status" class="status"></div>
 
 <script src="app.js"></script>
+<script src="update.js"></script>
 </body>
 </html>

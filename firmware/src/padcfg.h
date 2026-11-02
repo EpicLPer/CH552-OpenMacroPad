@@ -77,7 +77,7 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // changes; the two move independently, since most firmware releases will not
 // disturb stored keymaps.
 #define FW_VERSION_MAJOR 1
-#define FW_VERSION_MINOR 1
+#define FW_VERSION_MINOR 2
 #define FW_VERSION_PATCH 0
 
 #define CFG_REPORT_ID   3
