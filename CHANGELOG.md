@@ -15,6 +15,10 @@ layout setting.
 - The configurator is `tools/webui/index.html`. Chrome or Edge talk to the
   pad with WebHID. No Python server. A pad that is not yet 1.2.0 still needs
   one `chflash.py` of the full image.
+- macOS `@` follows the Apple input source. German is Option+L (Option+Q is
+  `«`). UK is Shift+2. US stays Shift+2 and French stays Option+à. Update
+  with the rebuilt `padfw-1.2.0.web.bin` (8143 bytes). The full image is
+  still 13296 bytes.
 - On macOS the tools open the pad when hidapi only lists the keyboard
   usage page. The vendor collection is still report id 3 on that device.
   Allow Terminal under Input Monitoring if the pad does not appear at all.

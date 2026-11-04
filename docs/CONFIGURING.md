@@ -103,7 +103,10 @@ US position, so `ctrl+z` became Ctrl+Y on a German keyboard and `@` became `"`.
 
 Bindings are the thing you want typed. The pad stores a separate setting for
 which computer it is plugged into, and translates when the key is pressed.
-`@` is Shift+2 on US, Shift+' on UK, AltGr+Q on German and AltGr+à on French.
+`@` is Shift+2 on US. On Windows and Linux it is Shift+' on UK, AltGr+Q on
+German and AltGr+à on French. On macOS, UK `@` is Shift+2 and German `@` is
+Option+L, because Option+Q is `«` on Apple's German input source. French
+macOS is Option+à, the same key Windows uses.
 `ctrl+z` is the key that layout labels Z, so undo stays undo. `z` and `y` are
 swapped the same way. Named keys such as Enter, the arrows and F13 are
 positions and do not change.

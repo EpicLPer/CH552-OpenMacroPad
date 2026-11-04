@@ -89,6 +89,31 @@ uint8_t layout_plan(uint8_t layout, uint8_t os, uint16_t code, uint8_t user_mod,
     return PLAN_NONE;
   }
 
+  // The layout tables are the Windows/Linux chords. macOS was stored in the
+  // profile but ignored here, so German+macOS still sent AltGr+Q. On Apple's
+  // German input source that key is «; @ is Option+L. British macOS puts @
+  // on Shift+2. No Unicode sequence on macOS.
+  if(os == HOST_OS_MAC && code == 0x40) {
+    switch(layout) {
+      case LAY_UK:
+        usage = 0x1F;
+        flags = CH_SHIFT;
+        break;
+      case LAY_DE:
+        usage = 0x0F;
+        flags = CH_ALTGR;
+        break;
+      case LAY_FR:
+        usage = 0x27;
+        flags = CH_ALTGR;
+        break;
+      default:
+        usage = 0x1F;
+        flags = CH_SHIFT;
+        break;
+    }
+  }
+
   nonshift = user_mod & (uint8_t)~(MOD_LSHIFT | MOD_RSHIFT);
   is_letter = (code >= 'A' && code <= 'Z') || (code >= 'a' && code <= 'z');
   is_digit = (code >= '0' && code <= '9');

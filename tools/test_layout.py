@@ -130,6 +130,25 @@ def test_known_chords() -> None:
     check("FR < is the non-us key", (hold(LAY_FR, "<").hid, hold(LAY_FR, "<").mods),
           (0x64, 0))
 
+    # Layout and OS are separate profile bits. The ASCII tables are Windows
+    # chords, and macOS used to ignore the OS bit. German Option+Q is «;
+    # @ on that input source is Option+L. British macOS puts @ on Shift+2.
+    mac_de = plan(LAY_DE, OS_MAC, ord("@"), 0)
+    check("macOS DE @ is option+L", (mac_de.kind, mac_de.hid, mac_de.mods),
+          (PLAN_HOLD, 0x0F, MOD_RALT))
+    check("Windows DE @ stays altgr+Q", (de_at.hid, de_at.mods), (0x14, MOD_RALT))
+    mac_uk = plan(LAY_UK, OS_MAC, ord("@"), 0)
+    check("macOS UK @ is shift+2", (mac_uk.kind, mac_uk.hid, mac_uk.mods),
+          (PLAN_HOLD, 0x1F, MOD_LSHIFT))
+    check("Windows UK @ stays shift+quote", (uk_at.hid, uk_at.mods), (0x34, MOD_LSHIFT))
+    mac_us = plan(LAY_US, OS_MAC, ord("@"), 0)
+    check("macOS US @ is shift+2", (mac_us.kind, mac_us.hid, mac_us.mods),
+          (PLAN_HOLD, 0x1F, MOD_LSHIFT))
+    mac_fr = plan(LAY_FR, OS_MAC, ord("@"), 0)
+    check("macOS FR @ is option+à", (mac_fr.kind, mac_fr.hid, mac_fr.mods),
+          (PLAN_HOLD, 0x27, MOD_RALT))
+    check("Windows FR @ is the same 0-key", (fr_at.hid, fr_at.mods), (0x27, MOD_RALT))
+
 
 def test_bindings_round_trip() -> None:
     samples = [
@@ -206,6 +225,7 @@ def test_firmware_planner_matches() -> None:
     cases.append((LAY_DE, OS_WIN, 0xB1, MOD_LCTRL))  # ctrl+esc, raw position
     for layout in range(4):
         cases.append((layout, OS_WIN, 136 + 0x64, 0))  # nonus_backslash
+        cases.append((layout, OS_MAC, ord("@"), 0))
     blob = "".join(f"{a} {b} {c} {d}\n" for a, b, c, d in cases)
     out = subprocess.run([str(binary), "-b"], input=blob, text=True,
                          capture_output=True, check=True)

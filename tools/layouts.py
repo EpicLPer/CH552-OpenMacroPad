@@ -362,6 +362,18 @@ class Plan:
         return f"{PLAN_NAMES[self.kind]} mods=0x{self.mods:02X} hid=0x{self.hid:02X} aux=0x{self.aux:X}"
 
 
+# Apple's input sources do not use the Windows AltGr chord for @.
+# German macOS: Option+Q is «, Option+L is @. British macOS: Shift+2 is @
+# (Windows UK puts @ on Shift+'). US is Shift+2 on both. French macOS is
+# Option+à, the same 0-key (HID 0x27) Windows uses with AltGr.
+_MAC_AT = {
+    LAY_US: _shift(0x1F),
+    LAY_UK: _shift(0x1F),
+    LAY_DE: _altgr(0x0F),
+    LAY_FR: _altgr(0x27),
+}
+
+
 def plan(layout: int, os_id: int, code: int, user_mod: int) -> Plan:
     """Decide what to emit for one stored binding.
 
@@ -390,6 +402,8 @@ def plan(layout: int, os_id: int, code: int, user_mod: int) -> Plan:
 
     cp = value
     found = lookup(layout, cp)
+    if os_id == OS_MAC and cp == 0x40 and layout in _MAC_AT:
+        found = _MAC_AT[layout]
     nonshift = user_mod & _NONSHIFT
     is_letter = (0x41 <= cp <= 0x5A) or (0x61 <= cp <= 0x7A)
     is_digit = 0x30 <= cp <= 0x39
