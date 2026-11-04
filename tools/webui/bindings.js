@@ -39,8 +39,10 @@
     4: "the data flash write did not take effect",
   };
 
-  const LAYOUTS = ["us", "uk", "de", "fr"];
-  const LAYOUT_LABELS = { us: "US", uk: "UK", de: "German", fr: "French" };
+  const LAYOUTS = ["us", "uk", "de", "fr", "es"];
+  const LAYOUT_LABELS = {
+    us: "US", uk: "UK", de: "German", fr: "French", es: "Spanish",
+  };
   const OS_NAMES = ["windows", "linux", "macos"];
   const OS_LABELS = { windows: "Windows", linux: "Linux", macos: "macOS" };
   const HOST_LAY_MASK = 0x07;
@@ -148,28 +150,6 @@
     if (!spec || ["none", "-", "off", "unbound"].includes(spec.toLowerCase())) {
       return { type: ACT_NONE, mod: 0, code: 0 };
     }
-    const upper = spec.toUpperCase();
-    if (Object.prototype.hasOwnProperty.call(CONSUMER, upper)) {
-      return { type: ACT_CON, mod: 0, code: CONSUMER[upper] };
-    }
-    if (Object.prototype.hasOwnProperty.call(MOUSE_BUTTONS, upper)) {
-      return { type: ACT_MOUSE, mod: 0, code: (MS_BUTTON << 8) | MOUSE_BUTTONS[upper] };
-    }
-    const colon = upper.indexOf(":");
-    const base = colon < 0 ? upper : upper.slice(0, colon);
-    const count = colon < 0 ? "" : upper.slice(colon + 1);
-    if (Object.prototype.hasOwnProperty.call(MOUSE_DELTAS, base)) {
-      const [sub, sign] = MOUSE_DELTAS[base];
-      let steps = Math.abs(sign);
-      if (count) {
-        if (!/^\d+$/.test(count) || +count < 1 || +count > 127) {
-          throw new Error(`step count in '${spec}' must be 1 to 127`);
-        }
-        steps = +count;
-      }
-      const val = sign > 0 ? steps : -steps;
-      return { type: ACT_MOUSE, mod: 0, code: (sub << 8) | (val & 0xFF) };
-    }
     const split = splitBinding(spec);
     let mod = 0;
     for (const name of split.mods) {
@@ -180,6 +160,29 @@
       mod |= MODIFIERS[low];
     }
     const key = split.key.trim();
+    const upperKey = key.toUpperCase();
+    if (Object.prototype.hasOwnProperty.call(CONSUMER, upperKey)) {
+      if (mod) throw new Error("media keys cannot take a modifier");
+      return { type: ACT_CON, mod: 0, code: CONSUMER[upperKey] };
+    }
+    if (Object.prototype.hasOwnProperty.call(MOUSE_BUTTONS, upperKey)) {
+      return { type: ACT_MOUSE, mod, code: (MS_BUTTON << 8) | MOUSE_BUTTONS[upperKey] };
+    }
+    const colon = upperKey.indexOf(":");
+    const base = colon < 0 ? upperKey : upperKey.slice(0, colon);
+    const count = colon < 0 ? "" : upperKey.slice(colon + 1);
+    if (Object.prototype.hasOwnProperty.call(MOUSE_DELTAS, base)) {
+      const [sub, sign] = MOUSE_DELTAS[base];
+      let steps = Math.abs(sign);
+      if (count) {
+        if (!/^\d+$/.test(count) || +count < 1 || +count > 127) {
+          throw new Error(`step count in '${spec}' must be 1 to 127`);
+        }
+        steps = +count;
+      }
+      const val = sign > 0 ? steps : -steps;
+      return { type: ACT_MOUSE, mod, code: (sub << 8) | (val & 0xFF) };
+    }
     if (key.slice(0, 4).toUpperCase() === "RAW:") {
       const text = key.slice(4).trim();
       const usage = /^0x/i.test(text) ? parseInt(text, 16) : parseInt(text, 10);
@@ -210,16 +213,21 @@
     if (action.type === ACT_MOUSE) {
       const sub = action.code >> 8;
       const val = action.code & 0xFF;
+      let name;
       if (sub === MS_BUTTON) {
-        return MOUSE_BTN_NAMES[val] || `mouse buttons 0x${val.toString(16).padStart(2, "0")}`;
-      }
-      const signed = val > 127 ? val - 256 : val;
-      for (const [name, pair] of Object.entries(MOUSE_DELTAS)) {
-        if (pair[0] === sub && (pair[1] > 0) === (signed > 0)) {
-          return `${name}:${Math.abs(signed)}`;
+        name = MOUSE_BTN_NAMES[val] || `mouse buttons 0x${val.toString(16).padStart(2, "0")}`;
+      } else {
+        const signed = val > 127 ? val - 256 : val;
+        name = `mouse 0x${action.code.toString(16).padStart(4, "0")}`;
+        for (const [delta, pair] of Object.entries(MOUSE_DELTAS)) {
+          if (pair[0] === sub && (pair[1] > 0) === (signed > 0)) {
+            name = `${delta}:${Math.abs(signed)}`;
+            break;
+          }
         }
       }
-      return `mouse 0x${action.code.toString(16).padStart(4, "0")}`;
+      const mods = MOD_ORDER.filter((m) => action.mod & MODIFIERS[m]);
+      return mods.concat([name]).join("+");
     }
     if (action.type === ACT_KEY) {
       let name = KEY_NAMES[action.code];
@@ -288,7 +296,7 @@
 
   function validProfile(byte) {
     if (byte & ~0x3F) return false;
-    if ((byte & HOST_LAY_MASK) > 3) return false;
+    if ((byte & HOST_LAY_MASK) >= LAYOUTS.length) return false;
     if (((byte >> HOST_OS_SHIFT) & 0x03) > 2) return false;
     return true;
   }

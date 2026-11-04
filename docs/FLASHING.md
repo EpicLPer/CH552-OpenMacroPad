@@ -8,8 +8,8 @@ The CH552 bootloader is in ROM and cannot be erased. A bad flash is recoverable.
 
 ## Already on 1.2.2
 
-1. Open the page and click **Connect**. The version at the top is Version 4.
-2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.2.web.bin`.
+1. Open the page and click **Connect**. The version at the top is Version 5.
+2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.3.web.bin`.
 3. Press **Update firmware** and leave the cable in until the pad reboots.
 
 ## A pad that says firmware 1.2.0
@@ -21,14 +21,14 @@ configuration report. Unplug and plug the cable back in. The keymap is still
 there.
 
 The writer lives above the area a browser update can replace, so 1.2.0 cannot
-fix itself. Flash the full `firmware/prebuilt/padfw-1.2.2.bin` (13376 bytes)
+fix itself. Flash the full `firmware/prebuilt/padfw-1.2.3.bin` (13376 bytes)
 with the steps below. After the pad reports 1.2.2, later updates are the
 `.web.bin`.
 
 ## First install, or a pad still on 1.0.0 or 1.1.0
 
 Those builds cannot write their own program flash. The page will say so.
-Flash the full `firmware/prebuilt/padfw-1.2.2.bin` (13376 bytes) once.
+Flash the full `firmware/prebuilt/padfw-1.2.3.bin` (13376 bytes) once.
 
 The stock firmware cannot be backed up. This replaces it, and the stock
 configuration tool will no longer talk to the pad.
@@ -58,7 +58,7 @@ Enter the bootloader, then flash. The bootloader is only present for a few
 seconds, so start the command first:
 
 ```
-python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30
+python tools/chflash.py firmware/prebuilt/padfw-1.2.3.bin --wait 30
 ```
 
 Then hold the **top-left key** while plugging the cable in. On stock firmware,
@@ -90,7 +90,7 @@ the bootloader.
 step.
 
 **The pad is an unrecognized device, or it stays a bootloader** — hold the
-top-left key, or bridge J2, and flash the full `padfw-1.2.2.bin` again.
+top-left key, or bridge J2, and flash the full `padfw-1.2.3.bin` again.
 Do not send the `.web.bin` to the ROM bootloader. `padfw-1.1.0.bin` is a
 complete keyboard image without the browser updater, if you want that before
 retrying 1.2.0.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Flash a binary to a CH55x through the WCH ISP bootloader.
 
-    python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30
+    python tools/chflash.py firmware/prebuilt/padfw-1.2.3.bin --wait 30
 
 The device must be in the bootloader. Hold the top-left key while plugging the
 cable in, or bridge the J2 pads while plugging in. Start this command first

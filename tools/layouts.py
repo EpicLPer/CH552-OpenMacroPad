@@ -36,13 +36,14 @@ MOD_RALT = 0x40
 MOD_RGUI = 0x80
 _NONSHIFT = ~(MOD_LSHIFT | MOD_RSHIFT) & 0xFF
 
-LAY_US, LAY_UK, LAY_DE, LAY_FR = 0, 1, 2, 3
-LAYOUTS = ("us", "uk", "de", "fr")
+LAY_US, LAY_UK, LAY_DE, LAY_FR, LAY_ES = range(5)
+LAYOUTS = ("us", "uk", "de", "fr", "es")
 LAYOUT_LABELS = {
     "us": "US",
     "uk": "UK",
     "de": "German",
     "fr": "French",
+    "es": "Spanish",
 }
 
 OS_WIN, OS_LINUX, OS_MAC = 0, 1, 2
@@ -259,6 +260,50 @@ def _fr_ascii() -> dict[int, tuple[int, int]]:
     return table
 
 
+def _es_ascii() -> dict[int, tuple[int, int]]:
+    """Spanish QWERTY. @ is AltGr+2, the same key Option uses on macOS."""
+    table = _letters(_qwerty_letters())
+    table.update({
+        0x20: _plain(0x2C),
+        0x21: _shift(0x1E),
+        0x22: _shift(0x1F),
+        0x23: _altgr(0x20),
+        0x24: _shift(0x21),
+        0x25: _shift(0x22),
+        0x26: _shift(0x23),
+        0x27: _plain(0x2D),
+        0x28: _shift(0x25),
+        0x29: _shift(0x26),
+        0x2A: _shift(0x30),
+        0x2B: _plain(0x30),
+        0x2C: _plain(0x36),
+        0x2D: _plain(0x38),
+        0x2E: _plain(0x37),
+        0x2F: _shift(0x24),
+        0x30: _plain(0x27),
+        0x3A: _shift(0x37),
+        0x3B: _shift(0x36),
+        0x3C: _plain(0x64),
+        0x3D: _shift(0x27),
+        0x3E: _shift(0x64),
+        0x3F: _shift(0x2D),
+        0x40: _altgr(0x1F),
+        0x5B: _altgr(0x2F),
+        0x5C: _altgr(0x35),
+        0x5D: _altgr(0x30),
+        0x5E: _dead(0x2F, SHIFT),
+        0x5F: _shift(0x38),
+        0x60: _dead(0x2F),
+        0x7B: _altgr(0x34),
+        0x7C: _altgr(0x1E),
+        0x7D: _altgr(0x32),
+        0x7E: _altgr(0x21),
+    })
+    for i, usage in enumerate(range(0x1E, 0x27)):
+        table[0x31 + i] = _plain(usage)
+    return table
+
+
 # Characters outside ASCII that have a single key on that layout.
 # Capitals of French accented letters are not on the shifted key (shift types
 # the digit), so they are left to the operating-system fallback.
@@ -304,6 +349,11 @@ _EXTRA: dict[int, dict[int, tuple[int, int]]] = {
         0x00F9: _plain(0x34),   # ù
         0x20AC: _altgr(0x08),   # €
     },
+    LAY_ES: {
+        0x00F1: _plain(0x33),   # ñ
+        0x00D1: _shift(0x33),   # Ñ
+        0x20AC: _altgr(0x22),   # €
+    },
 }
 
 ASCII = {
@@ -311,6 +361,7 @@ ASCII = {
     LAY_UK: _uk_ascii(),
     LAY_DE: _de_ascii(),
     LAY_FR: _fr_ascii(),
+    LAY_ES: _es_ascii(),
 }
 
 
@@ -504,7 +555,7 @@ def _flag_mods(flags: int) -> int:
 def valid_profile(byte: int) -> bool:
     if byte & ~0x3F:
         return False
-    if (byte & HOST_LAY_MASK) > LAY_FR:
+    if (byte & HOST_LAY_MASK) >= len(LAYOUTS):
         return False
     if ((byte >> HOST_OS_SHIFT) & 0x03) > OS_MAC:
         return False

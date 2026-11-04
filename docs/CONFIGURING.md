@@ -10,7 +10,7 @@ the page stops there.
 A pad on 1.2.0 cannot be updated from the page: its writer refuses the flash
 command and then stops answering until the cable is unplugged. The install
 is `python tools/chflash.py` with the full
-`firmware/prebuilt/padfw-1.2.2.bin`. After the pad reports 1.2.2, later
+`firmware/prebuilt/padfw-1.2.3.bin`. After the pad reports 1.2.2, later
 firmware updates are the `.web.bin` in the Firmware section.
 
 ## The configurator
@@ -103,7 +103,7 @@ would stop working, and macOS does not type characters that way.
 swapped the same way. Named keys such as Enter, the arrows and F13 are
 positions and do not change.
 
-The layouts are US, UK, German and French, and the OS is Windows, Linux or
+The layouts are US, UK, German, French and Spanish, and the OS is Windows, Linux or
 macOS. Both are set at the top of the page and survive unplugging. They are
 not part of a profile: a shared profile should type `@` on both computers,
 and each computer keeps its own layout and OS.

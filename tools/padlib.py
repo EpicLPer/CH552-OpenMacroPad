@@ -173,12 +173,18 @@ class Action:
         if self.type == ACT_MOUSE:
             sub, val = self.code >> 8, self.code & 0xFF
             if sub == MS_BUTTON:
-                return MOUSE_BTN_NAMES.get(val, f"mouse buttons 0x{val:02X}")
-            signed = val - 256 if val > 127 else val
-            for name, (s, v) in MOUSE_DELTAS.items():
-                if s == sub and (v > 0) == (signed > 0):
-                    return f"{name}:{abs(signed)}"
-            return f"mouse 0x{self.code:04X}"
+                name = MOUSE_BTN_NAMES.get(val, f"mouse buttons 0x{val:02X}")
+            else:
+                name = None
+                signed = val - 256 if val > 127 else val
+                for delta_name, (s, v) in MOUSE_DELTAS.items():
+                    if s == sub and (v > 0) == (signed > 0):
+                        name = f"{delta_name}:{abs(signed)}"
+                        break
+                if name is None:
+                    name = f"mouse 0x{self.code:04X}"
+            mods = [m for m in MOD_ORDER if self.mod & MODIFIERS[m]]
+            return "+".join(mods + [name])
         if self.type == ACT_KEY:
             name = KEY_NAMES.get(self.code)
             if name is None:
@@ -206,28 +212,6 @@ def parse(spec: str) -> Action:
     if not spec or spec.lower() in ("none", "-", "off", "unbound"):
         return Action()
 
-    upper = spec.upper()
-    if upper in CONSUMER:
-        return Action(ACT_CON, 0, CONSUMER[upper])
-    if upper in MOUSE_BUTTONS:
-        return Action(ACT_MOUSE, 0, (MS_BUTTON << 8) | MOUSE_BUTTONS[upper])
-
-    # Scroll and movement take an optional step count, as in SCROLL_DOWN:3.
-    # The string form is what gets written to profiles, so it has to survive a
-    # round trip through parse() unchanged.
-    base, _, count = upper.partition(":")
-    if base in MOUSE_DELTAS:
-        sub, sign = MOUSE_DELTAS[base]
-        steps = abs(sign)
-        if count:
-            if not count.isdigit() or not 1 <= int(count) <= 127:
-                raise ValueError(f"step count in '{spec}' must be 1 to 127")
-            steps = int(count)
-        val = steps if sign > 0 else -steps
-        return Action(ACT_MOUSE, 0, (sub << 8) | (val & 0xFF))
-
-    # Everything else is a keyboard chord: zero or more modifiers then one key.
-    # '+' is a key name, so 'ctrl++' is ctrl and the plus key.
     mod_names, key = split_binding(spec)
     mod = 0
     for name in mod_names:
@@ -236,6 +220,27 @@ def parse(spec: str) -> Action:
             raise ValueError(f"unknown modifier '{name}'")
         mod |= MODIFIERS[low]
     key = key.strip()
+    upper_key = key.upper()
+
+    if upper_key in CONSUMER:
+        if mod:
+            raise ValueError("media keys cannot take a modifier")
+        return Action(ACT_CON, 0, CONSUMER[upper_key])
+    if upper_key in MOUSE_BUTTONS:
+        return Action(ACT_MOUSE, mod, (MS_BUTTON << 8) | MOUSE_BUTTONS[upper_key])
+
+    base, _, count = upper_key.partition(":")
+    if base in MOUSE_DELTAS:
+        sub, sign = MOUSE_DELTAS[base]
+        steps = abs(sign)
+        if count:
+            if not count.isdigit() or not 1 <= int(count) <= 127:
+                raise ValueError(f"step count in '{spec}' must be 1 to 127")
+            steps = int(count)
+        val = steps if sign > 0 else -steps
+        return Action(ACT_MOUSE, mod, (sub << 8) | (val & 0xFF))
+
+    # '+' is a key name, so 'ctrl++' is ctrl and the plus key.
 
     # Raw HID usage, the escape hatch for positions with no name of their own.
     if key[:4].upper() == "RAW:":

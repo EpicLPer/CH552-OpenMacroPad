@@ -147,6 +147,12 @@ def test_known_chords() -> None:
     mac_fr = plan(LAY_FR, OS_MAC, ord("@"), 0)
     check("macOS FR @ is the key left of 1", (mac_fr.kind, mac_fr.hid, mac_fr.mods),
           (PLAN_HOLD, 0x35, 0))
+    check("Spanish @ is altgr+2",
+          (hold(layouts.LAY_ES, "@").hid, hold(layouts.LAY_ES, "@").mods),
+          (0x1F, MOD_RALT))
+    check("shift+mouse click", parse("shift+MOUSE_LEFT"),
+          Action(padlib.ACT_MOUSE, MOD_LSHIFT, 0x01))
+    check("shift+mouse click text", str(parse("shift+MOUSE_LEFT")), "shift+MOUSE_LEFT")
     check("Windows FR @ stays altgr+à", (fr_at.hid, fr_at.mods), (0x27, MOD_RALT))
     check("Linux DE @ stays altgr+Q", (plan(LAY_DE, OS_LINUX, ord("@"), 0).hid,
           plan(LAY_DE, OS_LINUX, ord("@"), 0).mods), (0x14, MOD_RALT))
@@ -170,7 +176,7 @@ def test_bindings_round_trip() -> None:
     samples = [
         "ctrl+z", "ctrl+Z", "ctrl+shift+z", "win+e", "@", "ä", "Ä", "€",
         "+", "ctrl++", "shift+2", "F13", "RAW:52", "SCROLL_DOWN:3",
-        "none", "space", "altgr+q", "MOUSE_BACK", "VOL_UP",
+        "none", "space", "altgr+q", "MOUSE_BACK", "shift+MOUSE_LEFT", "VOL_UP",
         "nonus_backslash", "<", "shift+nonus_backslash",
     ]
     for spec in samples:
@@ -230,7 +236,7 @@ def test_firmware_planner_matches() -> None:
          "-o", str(binary)],
     )
     cases = []
-    for layout in range(4):
+    for layout in range(len(layouts.LAYOUTS)):
         for cp in range(0x20, 0x7F):
             cases.append((layout, OS_WIN, cp, 0))
             cases.append((layout, OS_WIN, cp, MOD_LCTRL))
@@ -242,7 +248,7 @@ def test_firmware_planner_matches() -> None:
                 cases.append((layout, os_id, 0x8000 | cp, 0))
     cases.append((LAY_US, OS_WIN, 0xF0, 0))          # F13
     cases.append((LAY_DE, OS_WIN, 0xB1, MOD_LCTRL))  # ctrl+esc, raw position
-    for layout in range(4):
+    for layout in range(len(layouts.LAYOUTS)):
         cases.append((layout, OS_WIN, 136 + 0x64, 0))  # nonus_backslash
         cases.append((layout, OS_MAC, ord("@"), 0))
     blob = "".join(f"{a} {b} {c} {d}\n" for a, b, c, d in cases)

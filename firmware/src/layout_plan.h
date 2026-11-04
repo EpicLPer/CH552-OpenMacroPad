@@ -20,7 +20,8 @@
 #define LAY_UK          1
 #define LAY_DE          2
 #define LAY_FR          3
-#define LAY_COUNT       4
+#define LAY_ES          4
+#define LAY_COUNT       5
 
 #define HOST_OS_WIN     0
 #define HOST_OS_LINUX   1

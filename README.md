@@ -71,17 +71,17 @@ and the knobs handle volume and media playback.
 
 ## Getting started
 
-1. **Flash once** with `firmware/prebuilt/padfw-1.2.2.bin` (13376 bytes) if
+1. **Flash once** with `firmware/prebuilt/padfw-1.2.3.bin` (13376 bytes) if
    the pad is not already on 1.2.2. Firmware 1.2.0 cannot update itself from
    the page. Follow [`docs/FLASHING.md`](docs/FLASHING.md). Python is only
    for that flash.
 2. **Open** [`tools/webui/index.html`](tools/webui/index.html) in Chrome or
    Edge, click **Connect pad**, set the layout and OS, and edit the keys.
-   The header shows Version 4. Firefox and Safari cannot connect. See
+   The header shows Version 5. Firefox and Safari cannot connect. See
    [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
 A pad on 1.2.2 takes later firmware from the Firmware section of that same
-page (`padfw-1.2.2.web.bin`).
+page (`padfw-1.2.3.web.bin`).
 
 ![The browser configurator](docs/img/webgui.png)
 
@@ -98,7 +98,7 @@ page (`padfw-1.2.2.web.bin`).
 ## Known limitations
 
 - Characters and letter shortcuts follow the host layout stored on the pad
-  (US, UK, German or French) and the OS set next to it. Set both on the
+  (US, UK, German, French or Spanish) and the OS set next to it. Set both on the
   page, once per computer. Layouts outside those four, and characters a
   layout has no key for on macOS, are not translated. See
   [`docs/CONFIGURING.md`](docs/CONFIGURING.md#host-keyboard-layout).

@@ -117,8 +117,17 @@ static void actionPress(uint8_t idx) {
     case ACT_CON:
       CON_press(code);
       break;
-    case ACT_MOUSE:
-      switch(code >> 8) {
+    case ACT_MOUSE: {
+      uint8_t sub = (uint8_t)(code >> 8);
+      clearHold(idx);
+      if(Keymap[idx].mod) {
+        holdOn[idx] = 1;
+        holdMod[idx] = Keymap[idx].mod;
+        holdHid[idx] = 0;
+        syncKeyboard();
+        DLY_ms(20);
+      }
+      switch(sub) {
         case MS_BUTTON: MOUSE_press((uint8_t)code);            break;
         case MS_WHEEL:  MOUSE_wheel((int8_t)code);             break;
         case MS_PAN:    MOUSE_pan((int8_t)code);               break;
@@ -126,6 +135,7 @@ static void actionPress(uint8_t idx) {
         case MS_MOVE_Y: MOUSE_move(0, (int8_t)code);           break;
       }
       break;
+    }
     default:
       break;
   }
@@ -150,8 +160,17 @@ static void actionRelease(uint8_t idx) {
       CON_release(code);
       break;
     case ACT_MOUSE:
-      // Wheel, pan and movement are one-shot deltas with nothing to release.
+      // Wheel, pan and movement are one-shot deltas. A button stays down
+      // until release. Keyboard modifiers are held for that whole time.
       if((code >> 8) == MS_BUTTON) MOUSE_release((uint8_t)code);
+      if(holdOn[idx]) {
+        hadMod = holdMod[idx];
+        clearHold(idx);
+        if(hadMod) {
+          DLY_ms(20);
+          syncKeyboard();
+        }
+      }
       break;
     default:
       break;

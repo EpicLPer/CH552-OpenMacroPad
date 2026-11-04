@@ -62,7 +62,7 @@
 
 typedef struct {
   uint8_t  type;
-  uint8_t  mod;                         // MOD_* bitmask, keyboard actions only
+  uint8_t  mod;                         // keyboard modifier bitmask
   uint16_t code;
 } action_t;
 
@@ -78,7 +78,7 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // disturb stored keymaps.
 #define FW_VERSION_MAJOR 1
 #define FW_VERSION_MINOR 2
-#define FW_VERSION_PATCH 2
+#define FW_VERSION_PATCH 3
 
 #define CFG_REPORT_ID   3
 #define CFG_MAGIC0      'P'
@@ -97,7 +97,7 @@ extern __xdata action_t Keymap[ACT_COUNT];
 
 // Host profile, stored in the header byte that used to be reserved. Bindings
 // themselves stay layout-neutral; this byte says how to emit them.
-//   bits 0-2  layout: 0 US, 1 UK, 2 German, 3 French
+//   bits 0-2  layout: 0 US, 1 UK, 2 German, 3 French, 4 Spanish
 //   bit  3    1 once a tool has confirmed the value
 //   bits 4-5  OS: 0 Windows, 1 Linux, 2 macOS. macOS selects Apple's own
 //             input source. Windows and Linux share the PC chords. The OS is

@@ -339,14 +339,19 @@ function display(binding) {
   return !binding || binding === "-" ? "" : binding;
 }
 
+function bindingKey(binding) {
+  if (!binding || binding === "-") return "";
+  return splitChord(binding).key;
+}
+
 function bindingKind(binding) {
   if (!binding || binding === "-") return "none";
   if (!options) return "key";
-  if (options.consumer.includes(binding)) return "con";
-  if (options.mouseButtons.includes(binding)) return "mouse";
-  const base = binding.split(":")[0];
-  if (options.mouseDeltas.includes(base) && (binding === base || binding.includes(":")))
-    return "delta";
+  const key = bindingKey(binding).toUpperCase();
+  if (options.consumer.includes(key)) return "con";
+  if (options.mouseButtons.includes(key)) return "mouse";
+  const base = key.split(":")[0];
+  if (options.mouseDeltas.includes(base)) return "delta";
   return "key";
 }
 
@@ -384,7 +389,8 @@ function buildPickers() {
 
   const fn = el("function");
   fn.replaceChildren();
-  addOption(fn, "", "—");
+  addOption(fn, "", "Custom input");
+  addOption(fn, "__raw__", "RAW input");
   const groups = MANUAL_GROUPS.concat(consumerGroups(), [
     ["Mouse buttons", options.mouseButtons.map((n) => [n, n.replaceAll("_", " ")])],
     ["Scroll and pointer", options.mouseDeltas.map((n) => [n, n.replaceAll("_", " ")])],
@@ -395,10 +401,6 @@ function buildPickers() {
     for (const [value, label] of items) addOption(group, value, label);
     fn.appendChild(group);
   }
-  const rawGroup = document.createElement("optgroup");
-  rawGroup.label = "Other";
-  addOption(rawGroup, "__raw__", "Usage number");
-  fn.appendChild(rawGroup);
   el("rawUsage").max = options.rawMax;
 }
 
@@ -416,22 +418,22 @@ function syncPickers(binding) {
   stepsRow.hidden = true;
   if (!fn.options.length) return;
 
-  const key = binding && binding !== "-" ? splitChord(binding).key : "";
-  if (key.toUpperCase().startsWith("RAW:")) {
+  const key = bindingKey(binding).toUpperCase();
+  if (key.startsWith("RAW:")) {
     fn.value = "__raw__";
     rawRow.hidden = false;
     el("rawUsage").value = key.slice(4);
     return;
   }
   if (kind === "delta") {
-    const base = binding.split(":")[0];
+    const base = key.split(":")[0];
     fn.value = base;
     stepsRow.hidden = false;
-    el("steps").value = parseInt(binding.split(":")[1] || "1", 10);
+    el("steps").value = parseInt(key.split(":")[1] || "1", 10);
     return;
   }
-  if ([...fn.options].some((o) => o.value === binding)) {
-    fn.value = binding;
+  if ([...fn.options].some((o) => o.value === key)) {
+    fn.value = key;
     return;
   }
   fn.value = "";
@@ -439,10 +441,13 @@ function syncPickers(binding) {
 
 function syncMods(binding) {
   const kind = bindingKind(binding);
-  const mods = (kind === "key" || kind === "none") && binding && binding !== "-"
+  const blocked = kind === "con";
+  const mods = !blocked && binding && binding !== "-"
     ? splitChord(binding).mods.map((m) => m.toLowerCase())
     : [];
   for (const b of el("mods").children) {
+    b.disabled = blocked;
+    b.title = blocked ? "Media keys have no modifier." : "";
     b.classList.toggle("on", mods.includes(b.dataset.mod));
   }
 }
@@ -484,11 +489,7 @@ function commitText(text, { fromField = false } = {}) {
 }
 
 function toggleMod(name) {
-  const kind = bindingKind(staged.get(selected));
-  if (kind === "con" || kind === "mouse" || kind === "delta") {
-    say("Add the modifier to the binding. Example: ctrl+z.");
-    return;
-  }
+  if (bindingKind(staged.get(selected)) === "con") return;
   const text = el("binding").value.trim();
   const { mods, key } = text ? splitChord(text) : { mods: [], key: "" };
   const have = new Set(mods.map((m) => m.toLowerCase()));
@@ -499,22 +500,36 @@ function toggleMod(name) {
   commitText(body ? [...ordered, body].join("+") : (ordered.length ? `${ordered.join("+")}+` : ""));
 }
 
+function keptMods(allow) {
+  if (!allow) return [];
+  const text = el("binding").value.trim();
+  if (!text) return [];
+  return splitChord(text).mods.filter((m) => options.modifiers.includes(m.toLowerCase()));
+}
+
 function onFunction() {
   const value = el("function").value;
-  if (!value) return;
+  if (!value) {
+    el("binding").focus();
+    return;
+  }
   if (value === "__raw__") {
     const n = Math.max(1, Math.min(options.rawMax, parseInt(el("rawUsage").value, 10) || 1));
     el("rawUsage").value = n;
-    commitText(`RAW:${n}`);
+    const mods = keptMods(true);
+    commitText(mods.length ? `${mods.join("+")}+RAW:${n}` : `RAW:${n}`);
     return;
   }
   if (options.mouseDeltas.includes(value)) {
     const n = Math.max(1, Math.min(127, parseInt(el("steps").value, 10) || 1));
     el("steps").value = n;
-    commitText(`${value}:${n}`);
+    const mods = keptMods(true);
+    commitText(mods.length ? `${mods.join("+")}+${value}:${n}` : `${value}:${n}`);
     return;
   }
-  commitText(value);
+  const allow = !options.consumer.includes(value);
+  const mods = keptMods(allow);
+  commitText(mods.length ? `${mods.join("+")}+${value}` : value);
 }
 
 async function apply() {

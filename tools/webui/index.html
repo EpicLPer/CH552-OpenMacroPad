@@ -11,7 +11,7 @@
 
 <header>
   <h1>Macropad</h1>
-  <span class="ver" id="pageVersion">Version 4</span>
+  <span class="ver" id="pageVersion">Version 5</span>
   <span class="grow"></span>
   <button id="connect" class="primary" type="button">Connect</button>
   <div id="device" class="device">Pad firmware —</div>
@@ -33,14 +33,6 @@
   <section class="panel editor">
     <h2 id="editing">Key</h2>
     <div id="editor" hidden>
-      <label for="binding">Binding</label>
-      <div class="bindrow">
-        <input id="binding" type="text" autocomplete="off" spellcheck="false"
-               placeholder="@, ctrl+z, enter">
-        <button id="capture" type="button">Capture</button>
-      </div>
-      <div id="mods" class="mods"></div>
-
       <label for="function">Other</label>
       <select id="function"></select>
       <div id="stepsRow" hidden>
@@ -48,9 +40,17 @@
         <input id="steps" type="number" min="1" max="127" value="1">
       </div>
       <div id="rawRow" hidden>
-        <label for="rawUsage">Usage</label>
+        <label for="rawUsage">RAW input</label>
         <input id="rawUsage" type="number" min="1" max="119" value="100">
       </div>
+
+      <label for="binding">Binding</label>
+      <div class="bindrow">
+        <input id="binding" type="text" autocomplete="off" spellcheck="false"
+               placeholder="@, ctrl+z, enter">
+        <button id="capture" type="button">Capture</button>
+      </div>
+      <div id="mods" class="mods"></div>
 
       <button id="clear" class="texty" type="button">Clear</button>
       <div class="preview"><strong id="preview">nothing</strong></div>

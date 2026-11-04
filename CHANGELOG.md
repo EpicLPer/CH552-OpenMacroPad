@@ -7,6 +7,17 @@ The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
 which is noted explicitly below when it happens.
 
+## 1.2.3
+
+Storage format is still 2.
+
+- Spanish is a host layout. `@` is AltGr+2. Italian and the other common
+  layouts do not fit in the browser update image.
+- A mouse button, scroll or move can include Shift and the other keyboard
+  modifiers. The keyboard report carries the modifier and the mouse report
+  carries the button. Media keys still cannot.
+- The page shows Version 5.
+
 ## 1.2.2
 
 Storage format is still 2. Bindings and the host setting are kept.
@@ -75,7 +86,7 @@ layout setting.
 - The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
   interrupt table was only six bytes, so C startup sat on the USB vector, and
   the jump to the resident USB handler was written at `0x0040` instead of
-  `0x0043`. The current full image is `padfw-1.2.2.bin`. The matching
+  `0x0043`. The current full image is `padfw-1.2.3.bin`. The matching
   `.web.bin` is the one to send afterwards; the earlier 7962-byte file has
   the same broken vectors.
 

@@ -7,6 +7,7 @@
 #include "delay.h"
 #include "eeprom.h"
 #include "padcfg.h"
+#include "layout_plan.h"
 #include "usb_conkbd.h"
 #include "usb_descr.h"
 #include "usb_handler.h"
@@ -26,7 +27,7 @@ uint8_t PADCFG_hostProfile(void) {
 
 static uint8_t validProfile(uint8_t profile) {
   if(profile & ~(HOST_LAY_MASK | HOST_CONFIRMED | HOST_OS_MASK)) return 0;
-  if((profile & HOST_LAY_MASK) > 3) return 0;
+  if((profile & HOST_LAY_MASK) >= LAY_COUNT) return 0;
   if(((profile & HOST_OS_MASK) >> HOST_OS_SHIFT) > 2) return 0;
   return 1;
 }
@@ -106,7 +107,8 @@ static uint8_t validAction(uint8_t type, uint8_t mod, uint16_t code) {
     case ACT_CON:
       return (mod == 0) && (code > 0) && (code <= CON_CODE_MAX);
     case ACT_MOUSE:
-      if(mod) return 0;
+      // mod is the keyboard modifier byte held while the mouse report is
+      // down. The mouse report itself has no modifier field.
       if((code >> 8) > MS_SUB_MAX) return 0;
       if((code >> 8) == MS_BUTTON) return ((code & 0xFF) != 0) && ((code & 0xFF) <= 0x1F);
       return (code & 0xFF) != 0;        // a zero delta would do nothing

@@ -17,11 +17,10 @@
 
 * { box-sizing: border-box; }
 
-body {
+html, body {
+  min-height: 100%;
   margin: 0;
-  background:
-    radial-gradient(1200px 500px at 20% -10%, #1c2433 0%, transparent 55%),
-    var(--bg);
+  background: var(--bg);
   color: var(--ink);
   font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
 }
@@ -145,8 +144,9 @@ select, input[type="number"], input[type="text"] { width: 100%; }
 input[type="file"] { color: var(--dim); font-size: 13px; }
 
 .mods { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; margin-top: 10px; }
-.mods button { width: 100%; }
+.mods button:disabled { color: #5c6472; cursor: default; }
 .mods button {
+  width: 100%;
   height: auto;
   padding: 4px 8px;
   font-size: 12px;

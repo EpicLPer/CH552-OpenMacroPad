@@ -9,7 +9,7 @@ const CMD_DATA = 0x12;
 const CMD_COMMIT = 0x13;
 const DATA = 12;
 const ST_OK = 1;
-const FULL_IMAGE = "firmware/prebuilt/padfw-1.2.2.bin";
+const FULL_IMAGE = "firmware/prebuilt/padfw-1.2.3.bin";
 const FULL_BYTES = 13376;
 
 let image = null;
