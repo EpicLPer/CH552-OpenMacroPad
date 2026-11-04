@@ -43,9 +43,9 @@ void KBD_sync(uint8_t mods, uint8_t *hids, uint8_t n) {
   KBD_sendReport();
 }
 
-// ===================================================================================
-// ASCII to keycode mapping table
-// ===================================================================================
+#ifndef PADFW
+// ASCII typing for discovery.c. The pad firmware plans chords itself and does
+// not link this table; it would otherwise spill into the updater's staging page.
 __code uint8_t KBD_map[128] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x2b, 0x28, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -149,6 +149,7 @@ void KBD_releaseAll(void) {
 void KBD_print(char* str) {
   while(*str) KBD_type(*str++);
 }
+#endif
 
 // ===================================================================================
 // Press a consumer key on keyboard

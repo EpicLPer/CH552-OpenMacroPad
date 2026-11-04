@@ -155,13 +155,16 @@ function showHost(data) {
   el("matchHost").hidden = !data.supported;
   const note = el("hostNote");
   if (!data.supported) {
-    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.0.";
+    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.1.";
     note.className = "hint warn";
     return;
   }
   if (!host.confirmed) {
     note.textContent = "Not confirmed yet. Match this computer, or pick the keyboard yourself.";
     note.className = "hint warn";
+  } else if (host.os === "macos") {
+    note.textContent = "Apple's US, British, German or French input source. German Standard and British PC keep the Windows chords: set the OS to Windows for those.";
+    note.className = "hint";
   } else {
     note.textContent = "Characters follow this keyboard.";
     note.className = "hint";
@@ -633,7 +636,7 @@ el("boot").onclick = async () => {
     await HidPad.bootloader();
     el("device").textContent = "Not connected";
     el("device").className = "device";
-    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30. A pad already on 1.2.0 updates from the Firmware section with padfw-1.2.0.web.bin.", "good");
+    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.1.bin --wait 30. A pad already on 1.2.0 updates from the Firmware section with padfw-1.2.1.web.bin.", "good");
   } catch (err) {
     say(err.message, "bad");
   }

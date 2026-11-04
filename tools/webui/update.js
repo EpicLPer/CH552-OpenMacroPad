@@ -9,7 +9,7 @@ const CMD_DATA = 0x12;
 const CMD_COMMIT = 0x13;
 const DATA = 12;
 const ST_OK = 1;
-const FULL_IMAGE = "firmware/prebuilt/padfw-1.2.0.bin";
+const FULL_IMAGE = "firmware/prebuilt/padfw-1.2.1.bin";
 const FULL_BYTES = 13296;
 
 let image = null;
@@ -91,14 +91,14 @@ async function runUpdate() {
   bar.max = image.length;
   bar.value = 0;
   if (image.length < 0x400 || image.length > 0x2000) {
-    fwNote(`Image is ${image.length} bytes. Choose padfw-1.2.0.web.bin, not the full recovery file.`, "bad");
+    fwNote(`Image is ${image.length} bytes. Choose padfw-1.2.1.web.bin, not the full recovery file.`, "bad");
     fw("fwGo").disabled = false;
     return;
   }
   const trampoline = image[0] === 0x02 && image[1] === 0x24 && image[2] === 0x00 &&
     image[0x43] === 0x02 && image[0x44] === 0x24 && image[0x45] === 0x03;
   if (!trampoline) {
-    fwNote("This file would not enumerate. Use the rebuilt padfw-1.2.0.web.bin (USB jump at offset 0x43), not an older copy or the full .bin.", "bad");
+    fwNote("This file would not enumerate. Use padfw-1.2.1.web.bin (USB jump at offset 0x43), not an older copy or the full .bin.", "bad");
     fw("fwGo").disabled = false;
     return;
   }

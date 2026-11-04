@@ -145,9 +145,25 @@ def test_known_chords() -> None:
     check("macOS US @ is shift+2", (mac_us.kind, mac_us.hid, mac_us.mods),
           (PLAN_HOLD, 0x1F, MOD_LSHIFT))
     mac_fr = plan(LAY_FR, OS_MAC, ord("@"), 0)
-    check("macOS FR @ is option+à", (mac_fr.kind, mac_fr.hid, mac_fr.mods),
-          (PLAN_HOLD, 0x27, MOD_RALT))
-    check("Windows FR @ is the same 0-key", (fr_at.hid, fr_at.mods), (0x27, MOD_RALT))
+    check("macOS FR @ is the key left of 1", (mac_fr.kind, mac_fr.hid, mac_fr.mods),
+          (PLAN_HOLD, 0x35, 0))
+    check("Windows FR @ stays altgr+à", (fr_at.hid, fr_at.mods), (0x27, MOD_RALT))
+    check("Linux DE @ stays altgr+Q", (plan(LAY_DE, OS_LINUX, ord("@"), 0).hid,
+          plan(LAY_DE, OS_LINUX, ord("@"), 0).mods), (0x14, MOD_RALT))
+    check("macOS DE [ is option+5", plan(LAY_DE, OS_MAC, ord("["), 0).hid, 0x22)
+    check("Windows DE [ stays altgr+8", plan(LAY_DE, OS_WIN, ord("["), 0).hid, 0x25)
+    check("macOS DE ~ is a dead option+N",
+          (plan(LAY_DE, OS_MAC, ord("~"), 0).kind, plan(LAY_DE, OS_MAC, ord("~"), 0).hid),
+          (PLAN_DEAD, 0x11))
+    check("macOS DE ² has no key", plan(LAY_DE, OS_MAC, 0x8000 | 0xB2, 0).kind, PLAN_NONE)
+    check("macOS UK quote is shift+apostrophe", plan(LAY_UK, OS_MAC, ord('"'), 0).hid, 0x34)
+    check("macOS UK hash is option+3",
+          (plan(LAY_UK, OS_MAC, ord("#"), 0).hid, plan(LAY_UK, OS_MAC, ord("#"), 0).mods),
+          (0x20, MOD_RALT))
+    check("macOS US € is option+shift+2",
+          (plan(LAY_US, OS_MAC, 0x8000 | 0x20AC, 0).hid,
+           plan(LAY_US, OS_MAC, 0x8000 | 0x20AC, 0).mods),
+          (0x1F, MOD_LSHIFT | MOD_RALT))
 
 
 def test_bindings_round_trip() -> None:
@@ -218,7 +234,10 @@ def test_firmware_planner_matches() -> None:
         for cp in range(0x20, 0x7F):
             cases.append((layout, OS_WIN, cp, 0))
             cases.append((layout, OS_WIN, cp, MOD_LCTRL))
-        for cp in (0x00E4, 0x00F6, 0x00FC, 0x00DF, 0x20AC, 0x00A3, 0x00E9):
+            cases.append((layout, OS_MAC, cp, 0))
+            cases.append((layout, OS_LINUX, cp, 0))
+        for cp in (0x00E4, 0x00F6, 0x00FC, 0x00DF, 0x20AC, 0x00A3, 0x00E9,
+                   0x00B2, 0x00B3, 0x00A6, 0x00AC, 0x00A7, 0x00B5):
             for os_id in (OS_WIN, OS_LINUX, OS_MAC):
                 cases.append((layout, os_id, 0x8000 | cp, 0))
     cases.append((LAY_US, OS_WIN, 0xF0, 0))          # F13

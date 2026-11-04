@@ -15,13 +15,30 @@ static uint8_t flag_mods(uint8_t flags) {
   return mods;
 }
 
+static uint8_t punct_index(uint16_t cp) {
+  if(cp >= 0x20 && cp <= 0x40) return (uint8_t)(cp - 0x20);
+  if(cp >= 0x5B && cp <= 0x60) return (uint8_t)(33 + cp - 0x5B);
+  if(cp >= 0x7B && cp <= 0x7E) return (uint8_t)(39 + cp - 0x7B);
+  return 0xFF;
+}
+
 uint8_t layout_lookup(uint8_t layout, uint16_t cp, uint8_t *usage, uint8_t *flags) {
   uint8_t i;
   if(layout >= LAY_COUNT) return 0;
-  if(cp >= ASCII_FIRST && cp < (ASCII_FIRST + ASCII_COUNT)) {
-    i = (uint8_t)(cp - ASCII_FIRST);
-    *usage = LAY_ASCII_USAGE[layout][i];
-    *flags = LAY_ASCII_FLAGS[layout][i];
+  if(cp >= 'a' && cp <= 'z') {
+    *usage = LAY_LETTER[layout][cp - 'a'];
+    *flags = 0;
+    return 1;
+  }
+  if(cp >= 'A' && cp <= 'Z') {
+    *usage = LAY_LETTER[layout][cp - 'A'];
+    *flags = CH_SHIFT;
+    return 1;
+  }
+  i = punct_index(cp);
+  if(i != 0xFF) {
+    *usage = LAY_PUNCT_USAGE[layout][i];
+    *flags = LAY_PUNCT_FLAGS[layout][i];
     return *usage != 0;
   }
   for(i = 0; i < LAY_X_COUNT; i++) {
@@ -30,6 +47,22 @@ uint8_t layout_lookup(uint8_t layout, uint16_t cp, uint8_t *usage, uint8_t *flag
       *flags = LAY_X_FLAGS[i];
       return *usage != 0;
     }
+  }
+  return 0;
+}
+
+// 1: Apple chord written to usage/flags. 2: no key on this Apple layout.
+// 0: not listed, so the Windows/Linux chord stands.
+static uint8_t mac_override(uint8_t layout, uint16_t cp, uint8_t *usage, uint8_t *flags) {
+  uint8_t i, packed;
+  for(i = 0; i < LAY_MAC_COUNT; i++) {
+    if(LAY_MAC_CP[i] != cp) continue;
+    packed = LAY_MAC_FLAGS[i];
+    if((uint8_t)((packed >> 4) & 3) != layout) continue;
+    if(packed & LAY_MAC_NONE) return 2;
+    *usage = LAY_MAC_USAGE[i];
+    *flags = packed & (CH_SHIFT | CH_ALTGR | CH_DEAD);
+    return 1;
   }
   return 0;
 }
@@ -46,8 +79,7 @@ static uint8_t cp1252(uint16_t cp, uint8_t *byte) {
 
 uint8_t layout_plan(uint8_t layout, uint8_t os, uint16_t code, uint8_t user_mod,
                     uint8_t *mods, uint8_t *hid, uint16_t *aux) {
-  uint8_t usage, flags, nonshift, is_letter, is_digit;
-  uint8_t byte;
+  uint8_t usage, flags, nonshift, is_letter, is_digit, found, which;
 
   *mods = 0;
   *hid = 0;
@@ -75,11 +107,19 @@ uint8_t layout_plan(uint8_t layout, uint8_t os, uint16_t code, uint8_t user_mod,
   if(code & 0x8000) code &= 0x7FFF;
   if(code == 0) return PLAN_NONE;
 
-  if(!layout_lookup(layout, code, &usage, &flags)) {
+  usage = 0;
+  flags = 0;
+  found = layout_lookup(layout, code, &usage, &flags);
+  if(os == HOST_OS_MAC) {
+    which = mac_override(layout, code, &usage, &flags);
+    if(which == 1) found = 1;
+    else if(which == 2) found = 0;
+  }
+  if(!found) {
     nonshift = user_mod & (uint8_t)~(MOD_LSHIFT | MOD_RSHIFT);
     if(nonshift) return PLAN_NONE;
-    if(os == HOST_OS_WIN && cp1252(code, &byte)) {
-      *aux = byte;
+    if(os == HOST_OS_WIN && cp1252(code, &which)) {
+      *aux = which;
       return PLAN_ALT;
     }
     if(os == HOST_OS_LINUX) {
@@ -87,31 +127,6 @@ uint8_t layout_plan(uint8_t layout, uint8_t os, uint16_t code, uint8_t user_mod,
       return PLAN_UNI;
     }
     return PLAN_NONE;
-  }
-
-  // The layout tables are the Windows/Linux chords. macOS was stored in the
-  // profile but ignored here, so German+macOS still sent AltGr+Q. On Apple's
-  // German input source that key is «; @ is Option+L. British macOS puts @
-  // on Shift+2. No Unicode sequence on macOS.
-  if(os == HOST_OS_MAC && code == 0x40) {
-    switch(layout) {
-      case LAY_UK:
-        usage = 0x1F;
-        flags = CH_SHIFT;
-        break;
-      case LAY_DE:
-        usage = 0x0F;
-        flags = CH_ALTGR;
-        break;
-      case LAY_FR:
-        usage = 0x27;
-        flags = CH_ALTGR;
-        break;
-      default:
-        usage = 0x1F;
-        flags = CH_SHIFT;
-        break;
-    }
   }
 
   nonshift = user_mod & (uint8_t)~(MOD_LSHIFT | MOD_RSHIFT);

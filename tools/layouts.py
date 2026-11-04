@@ -52,7 +52,9 @@ OS_LABELS = {"windows": "Windows", "linux": "Linux", "macos": "macOS"}
 # Profile byte stored in the keymap header's previously reserved byte.
 #   bits 0-2  layout index
 #   bit  3    set once a tool has confirmed the value
-#   bits 4-5  operating system, for characters the layout has no key for
+#   bits 4-5  operating system. macOS selects Apple's input source.
+#             Windows and Linux share the PC chords. The OS also types a
+#             character the layout has no key for.
 #   bits 6-7  must stay 0
 HOST_LAY_MASK = 0x07
 HOST_CONFIRMED = 0x08
@@ -362,15 +364,73 @@ class Plan:
         return f"{PLAN_NAMES[self.kind]} mods=0x{self.mods:02X} hid=0x{self.hid:02X} aux=0x{self.aux:X}"
 
 
-# Apple's input sources do not use the Windows AltGr chord for @.
-# German macOS: Option+Q is «, Option+L is @. British macOS: Shift+2 is @
-# (Windows UK puts @ on Shift+'). US is Shift+2 on both. French macOS is
-# Option+à, the same 0-key (HID 0x27) Windows uses with AltGr.
-_MAC_AT = {
-    LAY_US: _shift(0x1F),
-    LAY_UK: _shift(0x1F),
-    LAY_DE: _altgr(0x0F),
-    LAY_FR: _altgr(0x27),
+# Apple's own input sources, not the PC-compatible ones (German Standard,
+# British PC). Those PC sources match the Windows tables, so a Mac set to
+# them should leave the pad's OS on Windows.
+#
+# Right Alt is Option on these sources. The German report of « is Option+Q,
+# which is the Windows AltGr+Q chord, so the modifier was already arriving
+# and the key position was wrong. Left Alt is a different key: Windows uses
+# it for menus, and macOS programs treat it as a shortcut modifier.
+#
+# German: QMK keymap_german_mac_iso.h and Apple's German layout (@ is
+# Option+L, « is Option+Q, brackets are Option+5/6/8/9).
+# French: QMK keymap_french_mac_iso.h. @ is the key left of 1, not Option+à
+# (that key is Ø). « is Option+è.
+# British: @ and " are swapped versus Windows, # is Option+3, € is Option+2,
+# and the ISO \ and # keys trade places (HID 0x64 is ` ~, HID 0x32 is \ |).
+# US: the ASCII keys match Windows. € is Option+Shift+2, £ is Option+3.
+#
+# None means the Windows chord types a different character and Apple has no
+# key, so macOS does nothing rather than typing the wrong glyph.
+_MAC_NONE = None
+_MAC: dict[tuple[int, int], tuple[int, int] | None] = {
+    (LAY_US, 0x00A3): _altgr(0x20),          # £ Option+3
+    (LAY_US, 0x20AC): (0x1F, SHIFT | ALTGR), # € Option+Shift+2
+
+    (LAY_UK, 0x22): _shift(0x34),            # "
+    (LAY_UK, 0x23): _altgr(0x20),            # #
+    (LAY_UK, 0x40): _shift(0x1F),            # @
+    (LAY_UK, 0x5C): _plain(0x32),            # backslash
+    (LAY_UK, 0x60): _plain(0x64),            # `
+    (LAY_UK, 0x7C): _shift(0x32),            # |
+    (LAY_UK, 0x7E): _shift(0x64),            # ~
+    (LAY_UK, 0x00A6): _MAC_NONE,             # ¦
+    (LAY_UK, 0x00AC): _altgr(0x0F),          # ¬ Option+L
+    (LAY_UK, 0x20AC): _altgr(0x1F),          # € Option+2
+
+    (LAY_DE, 0x40): _altgr(0x0F),            # @ Option+L
+    (LAY_DE, 0x5B): _altgr(0x22),            # [ Option+5
+    (LAY_DE, 0x5C): (0x24, SHIFT | ALTGR),   # \ Option+Shift+7
+    (LAY_DE, 0x5D): _altgr(0x23),            # ] Option+6
+    (LAY_DE, 0x7B): _altgr(0x25),            # { Option+8
+    (LAY_DE, 0x7C): _altgr(0x24),            # | Option+7
+    (LAY_DE, 0x7D): _altgr(0x26),            # } Option+9
+    (LAY_DE, 0x7E): _dead(0x11, ALTGR),      # ~ Option+N
+    (LAY_DE, 0x00B2): _MAC_NONE,             # ²
+    (LAY_DE, 0x00B3): _MAC_NONE,             # ³
+
+    (LAY_FR, 0x21): _plain(0x25),            # !
+    (LAY_FR, 0x23): _shift(0x35),            # #
+    (LAY_FR, 0x2A): _shift(0x30),            # *
+    (LAY_FR, 0x2B): _shift(0x38),            # +
+    (LAY_FR, 0x2D): _plain(0x2E),            # -
+    (LAY_FR, 0x3D): _plain(0x38),            # =
+    (LAY_FR, 0x40): _plain(0x35),            # @
+    (LAY_FR, 0x5B): (0x22, SHIFT | ALTGR),   # [
+    (LAY_FR, 0x5C): (0x37, SHIFT | ALTGR),   # backslash
+    (LAY_FR, 0x5D): (0x2D, SHIFT | ALTGR),   # ]
+    (LAY_FR, 0x5F): _shift(0x2E),            # _
+    (LAY_FR, 0x60): _plain(0x32),            # `
+    (LAY_FR, 0x7B): _altgr(0x22),            # {
+    (LAY_FR, 0x7C): (0x0F, SHIFT | ALTGR),   # |
+    (LAY_FR, 0x7D): _altgr(0x2D),            # }
+    (LAY_FR, 0x7E): _dead(0x11, ALTGR),      # ~
+    (LAY_FR, 0x00A3): _shift(0x32),          # £
+    (LAY_FR, 0x00A7): _plain(0x23),          # §
+    (LAY_FR, 0x00B2): _MAC_NONE,             # ²
+    (LAY_FR, 0x00B5): _altgr(0x33),          # µ
+    (LAY_FR, 0x20AC): _altgr(0x30),          # €
 }
 
 
@@ -402,8 +462,8 @@ def plan(layout: int, os_id: int, code: int, user_mod: int) -> Plan:
 
     cp = value
     found = lookup(layout, cp)
-    if os_id == OS_MAC and cp == 0x40 and layout in _MAC_AT:
-        found = _MAC_AT[layout]
+    if os_id == OS_MAC and (layout, cp) in _MAC:
+        found = _MAC[(layout, cp)]
     nonshift = user_mod & _NONSHIFT
     is_letter = (0x41 <= cp <= 0x5A) or (0x61 <= cp <= 0x7A)
     is_digit = 0x30 <= cp <= 0x39
@@ -563,36 +623,81 @@ def _detect_layout_linux() -> str | None:
     return None
 
 
+def _punct_slots() -> list[int]:
+    """ASCII characters that are not letters. Letters are a separate 26-byte row."""
+    slots = list(range(0x20, 0x41))
+    slots.extend(range(0x5B, 0x61))
+    slots.extend(range(0x7B, 0x7F))
+    return slots
+
+
+PUNCT_SLOTS = _punct_slots()
+
+
 def render_tables() -> str:
     """C tables consumed by layout_plan.c. Generated; do not edit by hand."""
     lines = [
         "/* Generated by tools/layouts.py. Do not edit.",
         " * Included by layout_plan.c, which defines LAY_ROM.",
-        " * usage 0 means the layout has no key for that ASCII character.",
-        " * flags: bit0 Left Shift, bit1 Right Alt (AltGr), bit2 dead key.",
+        " * Letters are LAY_LETTER. Every other ASCII character is LAY_PUNCT,",
+        " * indexed by punct_index() in layout_plan.c.",
+        " * usage 0 means the layout has no key for that character.",
+        " * flags: bit0 Left Shift, bit1 Right Alt (AltGr / macOS Option), bit2 dead key.",
+        " * LAY_MAC is the Apple input source where it differs. The flag byte's",
+        " * low three bits are Shift, AltGr and dead. Bits 4-5 are the layout.",
+        " * Bit 7 means macOS has no key and must not reuse the Windows chord.",
         " */",
         "",
-        f"LAY_ROM const uint8_t LAY_ASCII_USAGE[{len(LAYOUTS)}][{ASCII_COUNT}] = {{",
+        f"#define LAY_PUNCT_COUNT {len(PUNCT_SLOTS)}",
+        f"LAY_ROM const uint8_t LAY_PUNCT_USAGE[{len(LAYOUTS)}][LAY_PUNCT_COUNT] = {{",
     ]
     for layout in range(len(LAYOUTS)):
-        usages = []
-        for cp in range(ASCII_FIRST, ASCII_FIRST + ASCII_COUNT):
-            usages.append(ASCII[layout][cp][0])
+        usages = [ASCII[layout][cp][0] for cp in PUNCT_SLOTS]
         lines.append("  {")
-        for off in range(0, ASCII_COUNT, 15):
+        for off in range(0, len(PUNCT_SLOTS), 15):
             chunk = ", ".join(f"0x{b:02X}" for b in usages[off:off + 15])
             lines.append(f"    {chunk},")
         lines.append("  },")
     lines.append("};")
     lines.append("")
-    lines.append(f"LAY_ROM const uint8_t LAY_ASCII_FLAGS[{len(LAYOUTS)}][{ASCII_COUNT}] = {{")
+    lines.append(f"LAY_ROM const uint8_t LAY_PUNCT_FLAGS[{len(LAYOUTS)}][LAY_PUNCT_COUNT] = {{")
     for layout in range(len(LAYOUTS)):
-        flags = [ASCII[layout][cp][1] for cp in range(ASCII_FIRST, ASCII_FIRST + ASCII_COUNT)]
+        flags = [ASCII[layout][cp][1] for cp in PUNCT_SLOTS]
         lines.append("  {")
-        for off in range(0, ASCII_COUNT, 15):
+        for off in range(0, len(PUNCT_SLOTS), 15):
             chunk = ", ".join(f"0x{b:02X}" for b in flags[off:off + 15])
             lines.append(f"    {chunk},")
         lines.append("  },")
+    lines.append("};")
+    lines.append("")
+    lines.append(f"LAY_ROM const uint8_t LAY_LETTER[{len(LAYOUTS)}][26] = {{")
+    for layout in range(len(LAYOUTS)):
+        row = []
+        for ch in range(26):
+            usage, flags = ASCII[layout][ord("a") + ch]
+            if flags != 0:
+                raise ValueError(f"lowercase letter has flags at layout {layout}")
+            row.append(usage)
+        lines.append("  { " + ", ".join(f"0x{b:02X}" for b in row) + " },")
+    lines.append("};")
+    lines.append("")
+
+    mac_rows = []
+    for (lay, cp), chord in sorted(_MAC.items()):
+        if chord is None:
+            mac_rows.append((lay, cp, 0, 0x80))
+        else:
+            mac_rows.append((lay, cp, chord[0], chord[1]))
+    lines.append(f"#define LAY_MAC_COUNT {len(mac_rows)}")
+    lines.append("#define LAY_MAC_NONE 0x80")
+    lines.append("LAY_ROM const uint16_t LAY_MAC_CP[LAY_MAC_COUNT] = {")
+    lines.append("  " + ", ".join(f"0x{cp:04X}" for _, cp, _, _ in mac_rows))
+    lines.append("};")
+    lines.append("LAY_ROM const uint8_t LAY_MAC_USAGE[LAY_MAC_COUNT] = {")
+    lines.append("  " + ", ".join(f"0x{usage:02X}" for _, _, usage, _ in mac_rows))
+    lines.append("};")
+    lines.append("LAY_ROM const uint8_t LAY_MAC_FLAGS[LAY_MAC_COUNT] = {")
+    lines.append("  " + ", ".join(f"0x{flags | (lay << 4):02X}" for lay, _, _, flags in mac_rows))
     lines.append("};")
     lines.append("")
 

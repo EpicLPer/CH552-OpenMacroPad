@@ -72,7 +72,7 @@ and the knobs handle volume and media playback.
 ## Getting started
 
 1. **Flash once**, if the pad is not already on 1.2.0. That is
-   `firmware/prebuilt/padfw-1.2.0.bin` (13296 bytes) through
+   `firmware/prebuilt/padfw-1.2.1.bin` (13296 bytes) through
    [`docs/FLASHING.md`](docs/FLASHING.md). Python is only for that flash.
 2. **Open** [`tools/webui/index.html`](tools/webui/index.html) in Chrome or
    Edge, click **Connect pad**, set the layout and OS, and edit the keys.
@@ -80,7 +80,7 @@ and the knobs handle volume and media playback.
    [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
 A pad already on 1.2.0 takes later firmware from the Firmware section of that
-same page (`padfw-1.2.0.web.bin`).
+same page (`padfw-1.2.1.web.bin`). The page shows firmware 1.2.1 after it.
 
 ![The browser configurator](docs/img/webgui.png)
 

@@ -163,6 +163,18 @@ def low_image_end(ihx: Path) -> int:
     return end
 
 
+def check_staging_clear(mapfile: Path) -> None:
+    """The page at 0x2000 is the updater's scratch buffer, not program storage."""
+    import re
+    for line in mapfile.read_text(errors="replace").splitlines():
+        match = re.match(r"[AC]:\s+([0-9A-Fa-f]+)\s+(\S+)", line)
+        if not match:
+            continue
+        addr = int(match.group(1), 16)
+        if 0x2000 <= addr < 0x2400:
+            sys.exit(f"error: {match.group(2)} sits in the staging page at 0x{addr:04X}")
+
+
 def check_link_map(mem: Path) -> None:
     text = mem.read_text(errors="replace")
     if "RESIDENT" not in text:
@@ -256,6 +268,8 @@ def main() -> None:
         "--code-size", str(CODE_SIZE),
         f"-I{SRC}", f"-DF_CPU={FREQ_SYS}",
     ]
+    if target == "padfw":
+        cflags.append("-DPADFW")
     if args.swap_bus:
         cflags.append("-DTM1650_SWAP_BUS")
 
@@ -309,6 +323,7 @@ def main() -> None:
         web = ROOT / "padfw.web.bin"
         web.write_bytes(blob[:web_end])
         check_link_map(BUILD / f"{target}.map")
+        check_staging_clear(BUILD / f"{target}.map")
         bin_to_ihx(blob, hexfile)
         print(f"Web update image {web.name} ({web_end} bytes)")
     else:

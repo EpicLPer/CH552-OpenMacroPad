@@ -78,7 +78,7 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // disturb stored keymaps.
 #define FW_VERSION_MAJOR 1
 #define FW_VERSION_MINOR 2
-#define FW_VERSION_PATCH 0
+#define FW_VERSION_PATCH 1
 
 #define CFG_REPORT_ID   3
 #define CFG_MAGIC0      'P'
@@ -99,7 +99,9 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // themselves stay layout-neutral; this byte says how to emit them.
 //   bits 0-2  layout: 0 US, 1 UK, 2 German, 3 French
 //   bit  3    1 once a tool has confirmed the value
-//   bits 4-5  OS for characters the layout has no key for: 0 Windows, 1 Linux, 2 macOS
+//   bits 4-5  OS: 0 Windows, 1 Linux, 2 macOS. macOS selects Apple's own
+//             input source. Windows and Linux share the PC chords. The OS is
+//             also what types a character the layout has no key for.
 //   bits 6-7  must be 0
 #define HOST_LAY_MASK   0x07
 #define HOST_CONFIRMED  0x08

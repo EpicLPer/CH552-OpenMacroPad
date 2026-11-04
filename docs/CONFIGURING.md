@@ -9,7 +9,7 @@ the page stops there.
 
 A pad that is not yet on firmware 1.2.0 cannot be updated from the page. That
 one-time install is still `python tools/chflash.py` with the full
-`firmware/prebuilt/padfw-1.2.0.bin`. After 1.2.0, later firmware updates are
+`firmware/prebuilt/padfw-1.2.1.bin`. After 1.2.0, later firmware updates are
 the `.web.bin` in the Firmware section of the same page.
 
 ## The configurator
@@ -80,12 +80,24 @@ A USB keyboard reports key positions. The computer decides which character or
 shortcut that position is, using its own layout. Firmware 1.0.0 always sent the
 US position, so `ctrl+z` became Ctrl+Y on a German keyboard and `@` became `"`.
 
-Bindings are the thing you want typed. The pad stores a separate setting for
-which computer it is plugged into, and translates when the key is pressed.
-`@` is Shift+2 on US. On Windows and Linux it is Shift+' on UK, AltGr+Q on
-German and AltGr+à on French. On macOS, UK `@` is Shift+2 and German `@` is
-Option+L, because Option+Q is `«` on Apple's German input source. French
-macOS is Option+à, the same key Windows uses.
+Bindings are the thing you want typed. The pad stores the layout and the OS
+separately, and the firmware turns the character into a key when it is
+pressed. Resaving a binding does not change that chord.
+
+On Windows and Linux the chords are the PC ones. `@` is Shift+2 on US,
+Shift+' on UK, AltGr+Q on German and AltGr+à on French. On macOS the pad
+uses Apple's own input source, not German Standard or British PC. German
+`@` is Option+L, because Option+Q is `«`. British `@` is Shift+2 and `"` is
+Shift+'. French `@` is the key left of 1. The same pass fixes the other
+symbols those sources move, such as the German brackets and the French
+number row. Set the pad's OS to Windows if the Mac input source is German
+Standard or British PC, which keep the PC chords.
+
+Right Alt is the Option key on those Apple sources. Left Alt is left alone:
+on Windows it opens menus, and programs on both systems treat it as a
+shortcut modifier rather than a character key. macOS is not given Windows
+Alt+numpad codes. That sequence is not a held key, so repeat and shortcuts
+would stop working, and macOS does not type characters that way.
 `ctrl+z` is the key that layout labels Z, so undo stays undo. `z` and `y` are
 swapped the same way. Named keys such as Enter, the arrows and F13 are
 positions and do not change.

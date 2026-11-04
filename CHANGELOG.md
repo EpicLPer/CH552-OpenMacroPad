@@ -7,6 +7,23 @@ The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
 which is noted explicitly below when it happens.
 
+## 1.2.1
+
+Storage format is still 2. Bindings and the host setting are kept.
+
+- macOS now uses Apple's own input source for every character that differs,
+  not only `@`. German `@` is Option+L (Option+Q is `«`). British `@` is
+  Shift+2 and `"` is Shift+'. French `@` is the key left of 1. Brackets,
+  backslash and the French number-row symbols move with them. German
+  Standard and British PC still match the Windows chords: set the OS to
+  Windows for those.
+- The pad keeps sending a real key with Right Alt as Option. It does not
+  type Windows Alt+numpad codes on macOS.
+- Update from the page with `padfw-1.2.1.web.bin` (7896 bytes). The full
+  image is still `padfw-1.2.1.bin`, 13296 bytes. The page shows 1.2.1 after
+  the pad reboots. Until then, changing the OS or resaving `@` still sends
+  the old chord.
+
 ## 1.2.0
 
 Storage format is still 2. A pad running 1.1.0 keeps its bindings and its
@@ -15,10 +32,9 @@ layout setting.
 - The configurator is `tools/webui/index.html`. Chrome or Edge talk to the
   pad with WebHID. No Python server. A pad that is not yet 1.2.0 still needs
   one `chflash.py` of the full image.
-- macOS `@` follows the Apple input source. German is Option+L (Option+Q is
-  `«`). UK is Shift+2. US stays Shift+2 and French stays Option+à. Update
-  with the rebuilt `padfw-1.2.0.web.bin` (8143 bytes). The full image is
-  still 13296 bytes.
+- macOS `@` in the 1.2.0 image still followed the Windows chord except for one
+  special case, and a German Mac kept typing `«`. Firmware 1.2.1 replaces
+  that image.
 - The Python configurator is gone (`padweb.py`, `padconf.py`, `padgui.py`,
   `padselftest.py`). Open `tools/webui/index.html`. Python is only
   `chflash.py` for a pad that is not yet 1.2.0.
@@ -28,7 +44,8 @@ layout setting.
 
 - Firmware updates after this version go over the vendor HID collection, from
   the configurator in Chrome or Edge. No Zadig and no bootloader driver.
-  The image is `padfw-1.2.0.web.bin`. The USB stack that receives it is not
+  The image at the time was `padfw-1.2.0.web.bin`. The current file is
+  `padfw-1.2.1.web.bin`. The USB stack that receives it is not
   inside that file.
 - Getting onto 1.2.0 from 1.0.0 or 1.1.0 is still `chflash.py` and, on Windows,
   Zadig once. Those builds cannot write their own program flash.
