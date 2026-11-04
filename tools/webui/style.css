@@ -20,7 +20,10 @@
 html, body {
   min-height: 100%;
   margin: 0;
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: radial-gradient(160% 180% at 16% -20%, #1c2433 0%, transparent 100%);
+  background-attachment: fixed;
+  background-repeat: no-repeat;
   color: var(--ink);
   font: 15px/1.45 "Segoe UI", system-ui, sans-serif;
 }
