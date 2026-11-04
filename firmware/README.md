@@ -94,7 +94,7 @@ the 128 available:
 | 6 + 4n | Action *n*: type, modifier mask, code low, code high |
 
 The host profile is how a stored character becomes a HID report. `us`, `uk`,
-`de` and `fr` each have a table generated from `tools/layouts.py`. Letter and
+`de`, `fr` and `es` each have a table generated from `tools/layouts.py`. Letter and
 digit shortcuts use the key that layout labels with that character.
 `layout_plan.c` is the decision, checked against the Python tables by
 `tools/test_layout.py`, and `layout.c` is what actually sends the reports.

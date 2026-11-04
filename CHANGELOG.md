@@ -27,7 +27,8 @@ Storage format is still 2. Bindings and the host setting are kept.
   is skipped and the pad answers "could not write flash". It then stays in
   the updater and the next Connect is not a configuration report. Unplug
   and plug back in; the keymap is unchanged. A browser update cannot
-  replace that writer. `chflash` the full `padfw-1.2.2.bin` (13376 bytes).
+  replace that writer. The full image to flash now is `padfw-1.2.3.bin`
+  (13376 bytes).
 - 1.2.2 issues the flash command, then reads the status. If the erase
   command is rejected, it still tries a word write. A failed attempt that
   has not erased an application page returns to the configurator.
@@ -47,9 +48,10 @@ Storage format is still 2. Bindings and the host setting are kept.
   type Windows Alt+numpad codes on macOS.
 - The configurator header says Page 2. That is the HTML file, not the
   firmware the pad reports. An older copy of the page has no Page line.
-- Update from the page with `padfw-1.2.1.web.bin` (7896 bytes). The full
-  image is still `padfw-1.2.1.bin`, 13296 bytes. The page shows 1.2.1 after
-  the pad reboots. Until then, changing the OS or resaving `@` still sends
+- This release shipped `padfw-1.2.1.web.bin` (7896 bytes) and
+  `padfw-1.2.1.bin` (13296 bytes). The files to use now are
+  `padfw-1.2.3.web.bin` (8168 bytes) and `padfw-1.2.3.bin` (13376 bytes).
+  Until the pad was on 1.2.1, changing the OS or resaving `@` still sent
   the old chord.
 
 ## 1.2.0
@@ -73,7 +75,7 @@ layout setting.
 - Firmware updates after this version go over the vendor HID collection, from
   the configurator in Chrome or Edge. No Zadig and no bootloader driver.
   The image at the time was `padfw-1.2.0.web.bin`. The current file is
-  `padfw-1.2.1.web.bin`. The USB stack that receives it is not
+  `padfw-1.2.3.web.bin` (8168 bytes). The USB stack that receives it is not
   inside that file.
 - Getting onto 1.2.0 from 1.0.0 or 1.1.0 is still `chflash.py` and, on Windows,
   Zadig once. Those builds cannot write their own program flash.
@@ -82,7 +84,8 @@ layout setting.
   only after the rest of the image has been checked.
 - A 1.0.0 or 1.1.0 pad has no updater command. The configurator used to
   show that empty reply as "status 0". It now reads the firmware version
-  and names the one-time chflash of the 13296-byte full image.
+  and names the one-time chflash. The full image to flash now is
+  `padfw-1.2.3.bin` (13376 bytes).
 - The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
   interrupt table was only six bytes, so C startup sat on the USB vector, and
   the jump to the resident USB handler was written at `0x0040` instead of

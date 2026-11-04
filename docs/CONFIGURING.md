@@ -2,16 +2,15 @@
 
 Bindings live on the device, in the CH552's data flash. They survive unplugging
 and follow the pad to any computer. Changing one is a small write over USB, not
-a reflash. The configurator is a web page: open `tools/webui/index.html` in
-Chrome or Edge (double-click the file, or use File → Open). Click **Connect
-pad**. Nothing else has to be running. Firefox and Safari have no WebHID, so
-the page stops there.
+a reflash. Open `tools/webui/index.html` in Chrome or Edge (double-click the
+file, or use File → Open) and click **Connect**. Nothing else has to be
+running. Firefox and Safari have no WebHID, so the page stops there.
 
-A pad on 1.2.0 cannot be updated from the page: its writer refuses the flash
-command and then stops answering until the cable is unplugged. The install
-is `python tools/chflash.py` with the full
-`firmware/prebuilt/padfw-1.2.3.bin`. After the pad reports 1.2.2, later
-firmware updates are the `.web.bin` in the Firmware section.
+A pad on 1.2.2 or newer updates from the **Firmware** section with
+`firmware/prebuilt/padfw-1.2.3.web.bin` (8168 bytes). Stock firmware, 1.0.0,
+1.1.0 and 1.2.0 cannot. Flash `firmware/prebuilt/padfw-1.2.3.bin` (13376
+bytes) once, as described in [`FLASHING.md`](FLASHING.md). If an update from
+the page fails, unplug the pad and plug it back in.
 
 ## The configurator
 
@@ -22,9 +21,10 @@ turn-right. Click one to edit it.
 The binding box is where a character or shortcut goes. Type `a`, `@` or
 `ctrl+z`, or press **Capture** and hit the key. Capture only receives keys
 the browser actually reports. The Windows key is a common miss, so type
-`win+e` or tick **win**. The list under the box is only for things capture
-cannot be trusted with: media keys, mouse actions, the keypad, F13–F24,
-system keys and a raw HID usage. It is not a list of every character.
+`win+e` or tick **win**. **Other**, above the box, is for things capture
+cannot be trusted with: media keys, mouse actions, the keypad, F13–F24 and
+system keys. The first choice is Custom input. RAW input is the second. It
+is not a list of every character.
 
 `nonus_backslash` in that list is the ISO key, HID usage `0x64`, not the
 character `<`. German and French type `<` on that key with no shift, so the
@@ -35,14 +35,14 @@ outlined, and only those slots are written. Every write costs a data-flash
 cycle, so staging the edits keeps clicking around from consuming them.
 
 Firmware update is folded away at the bottom. It is the browser path for a
-pad already on 1.2.0.
+pad already on 1.2.2 or newer.
 
 | Button | What it does |
 | --- | --- |
 | Apply | Writes the changed slots. They persist across unplugging. |
 | Discard | Throws away edits, back to what the pad holds. |
 | Reload | Re-reads the device. |
-| Save / Load profile | JSON files, for backups and for sharing layouts. |
+| Save / Load | JSON files, for backups and for sharing layouts. |
 | Defaults | F13&ndash;F24 on the keys, volume and media on the knobs. |
 | Bootloader | Recovery path. Normal updates use the Firmware section instead. |
 
@@ -71,7 +71,8 @@ variants `rctrl`, `rshift`, `altgr`, `rwin`, joined with `+`: `win+e`,
 **Mouse.** `MOUSE_LEFT`, `MOUSE_RIGHT`, `MOUSE_MIDDLE`, `MOUSE_BACK`,
 `MOUSE_FORWARD`, plus `SCROLL_UP`, `SCROLL_DOWN`, `SCROLL_LEFT`, `SCROLL_RIGHT`
 and `MOUSE_MOVE_UP` and friends. Scroll and movement take a step count:
-`SCROLL_DOWN:3` scrolls three notches per detent.
+`SCROLL_DOWN:3` scrolls three notches per detent. These can take `shift` and
+the other modifiers (`shift+MOUSE_LEFT`). Media keys cannot.
 
 **Nothing.** `none` leaves a slot inert.
 
@@ -86,7 +87,8 @@ separately, and the firmware turns the character into a key when it is
 pressed. Resaving a binding does not change that chord.
 
 On Windows and Linux the chords are the PC ones. `@` is Shift+2 on US,
-Shift+' on UK, AltGr+Q on German and AltGr+à on French. On macOS the pad
+Shift+' on UK, AltGr+Q on German, AltGr+à on French and AltGr+2 on Spanish.
+On macOS the pad
 uses Apple's own input source, not German Standard or British PC. German
 `@` is Option+L, because Option+Q is `«`. British `@` is Shift+2 and `"` is
 Shift+'. French `@` is the key left of 1. The same pass fixes the other
@@ -109,12 +111,14 @@ not part of a profile: a shared profile should type `@` on both computers,
 and each computer keeps its own layout and OS.
 
 Characters that the selected layout has no key for are typed with an
-operating-system sequence. Windows uses Alt and the numeric keypad (CP1252, so
-this matches a US or Western European install, not a Cyrillic one). Linux uses
-Ctrl+Shift+U. macOS has no equivalent that works without a special input
-source, so those characters do nothing there rather than typing the wrong
-thing. A character that does have a key is held down normally, and the host's
-own repeat works. A fallback sequence types once per press.
+operating-system sequence. Windows uses Alt and the numeric keypad for a
+CP1252 byte: Latin-1 and the euro. A character outside that, such as `œ`,
+is not sent. Linux uses Ctrl+Shift+U for any character the pad can store,
+which is every code point through U+7FFF, and only where that input method
+is on. macOS has no equivalent that works on a normal input source, so those
+characters do nothing there rather than typing the wrong thing. A character
+that does have a key is held down normally, and the host's own repeat works.
+A fallback sequence types once per press.
 
 `shift+2` is still the 2 key with Shift held, which is a different character
 on a German keyboard than on a US one. Bind `@` when `@` is what you want.
@@ -127,10 +131,9 @@ hatch for a position with no name here, and for layouts this firmware does not
 know. A [HID usage table](https://usb.org/document-library/hid-usage-tables-16)
 lists the numbers; keyboard usages are in section 10.
 
-Firmware older than 1.1.0 cannot store the setting. The tools say so instead
-of pretending the command worked. Bindings written by 1.0.0 as a raw German
-position (the old meaning of `ä`) keep sending that position until the binding
-is written again. Saving a profile and loading it back stores the character.
+Firmware older than 1.1.0 cannot store the layout. Bindings written by 1.0.0
+as a raw German key position keep sending that position until the binding is
+written again. Saving a profile and loading it back stores the character.
 
 ## Profiles
 

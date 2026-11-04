@@ -13,7 +13,7 @@ polish. The configurator UX and support for other board variants have rough
 edges. Treat it as a solid starting point rather than a finished product;
 improvements and pull requests are very welcome.
 
-![The macropad board](docs/img/board-front.jpg)
+![OpenMacroPad](docs/img/pad.png)
 
 ## Why this exists
 
@@ -64,24 +64,28 @@ send:
 - **Media and applications** &mdash; volume, playback, browser navigation,
   calculator, screen lock, display brightness
 - **Mouse actions** &mdash; the five buttons including back and forward, scroll
-  wheel, horizontal scroll and pointer movement, with an adjustable step size
+  wheel, horizontal scroll and pointer movement, with an adjustable step size.
+  Shift and the other keyboard modifiers can be held with them. Media keys
+  cannot.
 
 By default the keys send F13 to F24, which no application binds out of the box,
 and the knobs handle volume and media playback.
 
 ## Getting started
 
-1. **Flash once** with `firmware/prebuilt/padfw-1.2.3.bin` (13376 bytes) if
-   the pad is not already on 1.2.2. Firmware 1.2.0 cannot update itself from
-   the page. Follow [`docs/FLASHING.md`](docs/FLASHING.md). Python is only
-   for that flash.
-2. **Open** [`tools/webui/index.html`](tools/webui/index.html) in Chrome or
-   Edge, click **Connect pad**, set the layout and OS, and edit the keys.
-   The header shows Version 5. Firefox and Safari cannot connect. See
-   [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
+Open [`tools/webui/index.html`](tools/webui/index.html) in Chrome or Edge and
+click **Connect**. The header shows Version 5. Firefox and Safari cannot
+connect. Keys, knobs, layout and OS are edited on that page. See
+[`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
-A pad on 1.2.2 takes later firmware from the Firmware section of that same
-page (`padfw-1.2.3.web.bin`).
+If the pad is not yet on firmware 1.2.2 or newer, flash the full image once
+before opening the page. Stock firmware, 1.0.0, 1.1.0 and 1.2.0 cannot take
+an update from the page. The file is `firmware/prebuilt/padfw-1.2.3.bin`
+(13376 bytes). Python is only for that flash. Follow
+[`docs/FLASHING.md`](docs/FLASHING.md).
+
+A pad already on 1.2.2 or newer updates from the Firmware section of the same
+page, with `firmware/prebuilt/padfw-1.2.3.web.bin` (8168 bytes).
 
 ![The browser configurator](docs/img/webgui.png)
 
@@ -98,9 +102,10 @@ page (`padfw-1.2.3.web.bin`).
 ## Known limitations
 
 - Characters and letter shortcuts follow the host layout stored on the pad
-  (US, UK, German, French or Spanish) and the OS set next to it. Set both on the
-  page, once per computer. Layouts outside those four, and characters a
-  layout has no key for on macOS, are not translated. See
+  (US, UK, German, French or Spanish) and the OS set next to it. Set both on
+  the page, once per computer. Other layouts are not included. A character
+  the layout has no key for is typed with a Windows or Linux fallback, and
+  does nothing on macOS. See
   [`docs/CONFIGURING.md`](docs/CONFIGURING.md#host-keyboard-layout).
 - Bindings are single actions. There are no multi-keystroke macros, no text
   strings and no layers.
