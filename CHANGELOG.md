@@ -1,7 +1,7 @@
 # Changelog
 
-Firmware versions are shown at the top of the configurator
-(`tools/webui/index.html`).
+Firmware versions are shown next to Connect after the pad answers.
+The header of this page has its own version, separate from that.
 
 The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
@@ -19,6 +19,8 @@ Storage format is still 2. Bindings and the host setting are kept.
   Windows for those.
 - The pad keeps sending a real key with Right Alt as Option. It does not
   type Windows Alt+numpad codes on macOS.
+- The configurator header says Page 2. That is the HTML file, not the
+  firmware the pad reports. An older copy of the page has no Page line.
 - Update from the page with `padfw-1.2.1.web.bin` (7896 bytes). The full
   image is still `padfw-1.2.1.bin`, 13296 bytes. The page shows 1.2.1 after
   the pad reboots. Until then, changing the OS or resaving `@` still sends
