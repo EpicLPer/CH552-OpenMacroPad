@@ -12,12 +12,40 @@
 // ===================================================================================
 // Keyboard HID report
 // ===================================================================================
+// Report IDs are written again in KBD_init. The build passes --no-xinit-opt,
+// which skips copying initialised XDATA out of flash, so a value that exists
+// only in this initialiser is not something to rely on.
 __xdata uint8_t  KBD_report[9] = {1,0,0,0,0,0,0,0,0};
 __xdata uint8_t  CON_report[9] = {2,0,0,0,0,0,0,0,0};
 
-// ===================================================================================
-// ASCII to keycode mapping table
-// ===================================================================================
+void KBD_init(void) {
+  uint8_t i;
+  HID_init();
+  KBD_report[0] = 1;
+  CON_report[0] = 2;
+  for(i = 1; i < 9; i++) {
+    KBD_report[i] = 0;
+    CON_report[i] = 0;
+  }
+  KBD_ledState = 0;
+  KBD_ledValid = 0;
+}
+
+void KBD_sync(uint8_t mods, uint8_t *hids, uint8_t n) {
+  uint8_t i;
+  KBD_report[0] = 1;
+  KBD_report[1] = mods;
+  KBD_report[2] = 0;
+  for(i = 0; i < 6; i++) {
+    // n == 0 must not read hids. Callers pass anything in that case.
+    KBD_report[3 + i] = (i < n) ? hids[i] : 0;
+  }
+  KBD_sendReport();
+}
+
+#ifndef PADFW
+// ASCII typing for discovery.c. The pad firmware plans chords itself and does
+// not link this table; it would otherwise spill into the updater's staging page.
 __code uint8_t KBD_map[128] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x2a, 0x2b, 0x28, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -40,8 +68,12 @@ void KBD_press(uint8_t key) {
   // Convert key for HID report
   if(key >= 136) key -= 136;                    // non-printing key/not a modifier?
   else if(key >= 128) {                         // modifier key?
-    KBD_report[1] |= (1<<(key-128));            // add modifier to report
-    key = 0;
+    // A modifier has no usage slot. Leaving key at 0 and falling through made
+    // the empty-slot scan below return without ever transmitting the report,
+    // so a modifier on its own never reached the host.
+    KBD_report[1] |= (1<<(key-128));
+    KBD_sendReport();
+    return;
   }
   else {                                        // printing key?
     key = KBD_map[key];                         // convert ascii to keycode for report
@@ -74,8 +106,9 @@ void KBD_release(uint8_t key) {
   uint8_t i;
   if(key >= 136) key -= 136;                    // non-printing key/not a modifier?
   else if(key >= 128) {                         // modifier key?
-    KBD_report[1] &= ~(1<<(key-128));           // delete modifier in report
-    key = 0;
+    KBD_report[1] &= ~(1<<(key-128));
+    KBD_sendReport();
+    return;
   }
   else {                                        // printing key?
     key = KBD_map[key];                         // convert ascii to keycode for report
@@ -116,6 +149,7 @@ void KBD_releaseAll(void) {
 void KBD_print(char* str) {
   while(*str) KBD_type(*str++);
 }
+#endif
 
 // ===================================================================================
 // Press a consumer key on keyboard
@@ -181,5 +215,9 @@ void CON_releaseAll(void) {
 // Get keyboard status LEDs
 // ===================================================================================
 uint8_t KBD_getState(void) {
-  return EP2_buffer[0];
+  // EP2_buffer[0] is the report id, not the LED bits. Reading it made Num Lock
+  // look stuck on (report id 1 has bit 0 set) and Scroll Lock look stuck off,
+  // which disabled the discovery firmware's scroll-lock gate. The LED byte is
+  // latched in PADCFG_onReport from report id 1.
+  return KBD_ledState;
 }

@@ -24,11 +24,8 @@
 #include "src/usb_conkbd.h"
 #include "src/usb_mouse.h"
 #include "src/padcfg.h"
-
-void USB_interrupt(void);
-void USB_ISR(void) __interrupt(INT_NO_USB) {
-  USB_interrupt();
-}
+#include "src/layout.h"
+#include "src/iap.h"
 
 #pragma disable_warning 110
 
@@ -64,35 +61,73 @@ static uint8_t indexOf(uint8_t code) {
 // Action dispatch
 // ===================================================================================
 
-// The modifier bitmask maps onto the stack's consecutive modifier key codes,
-// so bit n is KBD_KEY_LEFT_CTRL + n. Modifiers go down before the key and come
-// up after it, which is what applications expect from a chord.
-static void pressMods(uint8_t mod) {
-  uint8_t b;
-  for(b = 0; b < 8; b++)
-    if(mod & (1 << b)) KBD_press(KBD_KEY_LEFT_CTRL + b);
+// Which keyboard chord each slot is currently holding. Key 1 and one matrix
+// key can be down together, so the report is rebuilt from the whole table
+// rather than by poking one usage in and out. XDATA is not cleared at startup
+// (--no-xinit-opt), so main() zeroes these before the scan loop.
+static __xdata uint8_t holdOn[ACT_COUNT];
+static __xdata uint8_t holdMod[ACT_COUNT];
+static __xdata uint8_t holdHid[ACT_COUNT];
+
+static void syncKeyboard(void) {
+  uint8_t i, n = 0, mods = 0;
+  uint8_t hids[6];
+  for(i = 0; i < ACT_COUNT; i++) {
+    if(!holdOn[i]) continue;
+    mods |= holdMod[i];
+    if(holdHid[i] && n < 6) hids[n++] = holdHid[i];
+  }
+  KBD_sync(mods, hids, n);
 }
 
-static void releaseMods(uint8_t mod) {
-  uint8_t b = 8;
-  while(b--)
-    if(mod & (1 << b)) KBD_release(KBD_KEY_LEFT_CTRL + b);
+static void clearHold(uint8_t idx) {
+  holdOn[idx] = 0;
+  holdMod[idx] = 0;
+  holdHid[idx] = 0;
 }
 
 static void actionPress(uint8_t idx) {
   uint16_t code;
+  uint8_t mods, hid, kind;
   if(idx >= ACT_COUNT) return;
   code = Keymap[idx].code;
   switch(Keymap[idx].type) {
     case ACT_KEY:
-      pressMods(Keymap[idx].mod);
-      KBD_press((uint8_t)code);
+      clearHold(idx);
+      kind = LAYOUT_press(code, Keymap[idx].mod, &mods, &hid);
+      if(kind == LAY_OUT_HOLD) {
+        // Modifiers go out on their own report first. Some hosts, Windows in
+        // particular, miss Win+E and Ctrl+Shift+Esc when the modifier and the
+        // key arrive in the same packet.
+        holdOn[idx] = 1;
+        holdMod[idx] = mods;
+        holdHid[idx] = 0;
+        if(mods && hid) {
+          syncKeyboard();
+          DLY_ms(20);
+        }
+        holdHid[idx] = hid;
+        syncKeyboard();
+      } else if(kind == LAY_OUT_SHOT) {
+        // The sequence borrowed the keyboard report. Put back whatever else
+        // is still held.
+        syncKeyboard();
+      }
       break;
     case ACT_CON:
       CON_press(code);
       break;
-    case ACT_MOUSE:
-      switch(code >> 8) {
+    case ACT_MOUSE: {
+      uint8_t sub = (uint8_t)(code >> 8);
+      clearHold(idx);
+      if(Keymap[idx].mod) {
+        holdOn[idx] = 1;
+        holdMod[idx] = Keymap[idx].mod;
+        holdHid[idx] = 0;
+        syncKeyboard();
+        DLY_ms(20);
+      }
+      switch(sub) {
         case MS_BUTTON: MOUSE_press((uint8_t)code);            break;
         case MS_WHEEL:  MOUSE_wheel((int8_t)code);             break;
         case MS_PAN:    MOUSE_pan((int8_t)code);               break;
@@ -100,6 +135,7 @@ static void actionPress(uint8_t idx) {
         case MS_MOVE_Y: MOUSE_move(0, (int8_t)code);           break;
       }
       break;
+    }
     default:
       break;
   }
@@ -107,19 +143,34 @@ static void actionPress(uint8_t idx) {
 
 static void actionRelease(uint8_t idx) {
   uint16_t code;
+  uint8_t hadMod;
   if(idx >= ACT_COUNT) return;
   code = Keymap[idx].code;
   switch(Keymap[idx].type) {
     case ACT_KEY:
-      KBD_release((uint8_t)code);
-      releaseMods(Keymap[idx].mod);
+      if(!holdOn[idx]) break;
+      hadMod = holdMod[idx];
+      holdHid[idx] = 0;
+      syncKeyboard();
+      if(hadMod) DLY_ms(20);
+      clearHold(idx);
+      if(hadMod) syncKeyboard();
       break;
     case ACT_CON:
       CON_release(code);
       break;
     case ACT_MOUSE:
-      // Wheel, pan and movement are one-shot deltas with nothing to release.
+      // Wheel, pan and movement are one-shot deltas. A button stays down
+      // until release. Keyboard modifiers are held for that whole time.
       if((code >> 8) == MS_BUTTON) MOUSE_release((uint8_t)code);
+      if(holdOn[idx]) {
+        hadMod = holdMod[idx];
+        clearHold(idx);
+        if(hadMod) {
+          DLY_ms(20);
+          syncKeyboard();
+        }
+      }
       break;
     default:
       break;
@@ -170,11 +221,14 @@ static void encoderPoll(uint8_t a, uint8_t b, __idata uint8_t *armed,
 void main(void) {
   __idata uint8_t keyStable = 0;        // debounced TM1650 code
   __idata uint8_t keyPending = 0;
+  __idata uint8_t keyCand = 0;          // candidate waiting for a matching read
   __idata uint8_t keySame = 0;
-  __idata uint8_t activeIdx = 0xFF;     // action currently held down
+  __idata uint8_t activeIdx = 0xFF;     // matrix action currently held down
   __idata uint8_t topArmed = 1;
   __idata uint8_t botArmed = 1;
-  __bit key1Last = 0;
+  __idata uint8_t key1Deb = 0;
+  __idata uint8_t i;
+  __bit key1Stable = 0;
   __bit raw;
 
   CLK_config();
@@ -191,36 +245,52 @@ void main(void) {
 
   PADCFG_init();
   TM1650_init();
+  iap_mode = 0;
   KBD_init();
+  MOUSE_init();
+  for(i = 0; i < ACT_COUNT; i++) clearHold(i);
 
   while(1) {
     PADCFG_task();                      // service any pending keymap command
 
-    // Key 1, straight off a GPIO
+    // Key 1, straight off a GPIO. It has no matrix scan behind it, so it
+    // bounces; require the new level to sit still for a few passes.
     raw = !PIN_read(PIN_KEY1);
-    if(raw != key1Last) {
-      key1Last = raw;
+    if(raw == key1Stable) {
+      key1Deb = 0;
+    }
+    else if(++key1Deb >= 12) {
+      key1Deb = 0;
+      key1Stable = raw;
       if(raw) actionPress(0);
       else    actionRelease(0);
     }
 
     // Keys 2-12 and the encoder switches, via the TM1650.
-    // The datasheet asks for two consecutive equal reads before trusting a code.
+    // The datasheet asks for two consecutive equal reads before trusting a
+    // code. Counting reads that merely differ from the last accepted value
+    // would accept a bounce between two different codes.
     keyPending = TM1650_readKey();
     if(keyPending == keyStable) {
       keySame = 0;
     }
-    else if(++keySame >= 2) {
-      keySame = 0;
-      keyStable = keyPending;
-      if(activeIdx != 0xFF) {
-        actionRelease(activeIdx);
-        activeIdx = 0xFF;
+    else if(keyPending == keyCand) {
+      if(++keySame >= 2) {
+        keySame = 0;
+        keyStable = keyPending;
+        if(activeIdx != 0xFF) {
+          actionRelease(activeIdx);
+          activeIdx = 0xFF;
+        }
+        if(keyStable & TM1650_KEY_PRESSED) {
+          activeIdx = indexOf(keyStable);
+          if(activeIdx != 0xFF) actionPress(activeIdx);
+        }
       }
-      if(keyStable & TM1650_KEY_PRESSED) {
-        activeIdx = indexOf(keyStable);
-        if(activeIdx != 0xFF) actionPress(activeIdx);
-      }
+    }
+    else {
+      keyCand = keyPending;
+      keySame = 1;
     }
 
     encoderPoll(PIN_read(PIN_ENC1_A), PIN_read(PIN_ENC1_B),

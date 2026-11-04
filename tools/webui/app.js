@@ -4,12 +4,68 @@
 // costs a data-flash cycle, so the pad is left alone until the user commits,
 // and even then only the slots that actually changed are sent.
 
-const KNOB_ROWS = [
-  ["Top", ["top-ccw", "top-press", "top-cw"]],
-  ["Bottom", ["bot-ccw", "bot-press", "bot-cw"]],
+const SVGNS = "http://www.w3.org/2000/svg";
+
+// Twelve keys, three rows of four, top-left to bottom-right. The two knobs
+// sit on the right of that grid, matching the board: top knob, then the
+// empty middle footprint, then the bottom knob.
+const KEY_GEO = (() => {
+  const out = [];
+  for (let n = 1; n <= 12; n++) {
+    const i = n - 1;
+    out.push({
+      id: String(n),
+      x: 36 + (i % 4) * 116,
+      y: 32 + Math.floor(i / 4) * 104,
+      w: 104,
+      h: 80,
+    });
+  }
+  return out;
+})();
+
+const KNOB_ROWS = [32, 240];
+const KNOB_X = 520;
+const ZONE_W = 100;
+const ZONE_H = 80;
+const ZONE_GAP = 12;
+
+const KNOBS = [
+  {
+    name: "Top", y: KNOB_ROWS[0],
+    parts: [
+      { id: "top-ccw", caption: "Left" },
+      { id: "top-press", caption: "Press" },
+      { id: "top-cw", caption: "Right" },
+    ],
+  },
+  {
+    name: "Bottom", y: KNOB_ROWS[1],
+    parts: [
+      { id: "bot-ccw", caption: "Left" },
+      { id: "bot-press", caption: "Press" },
+      { id: "bot-cw", caption: "Right" },
+    ],
+  },
 ];
 
-// Browser key names differ from the firmware's; translate the ones that clash.
+// Names the browser often never delivers. Ordinary characters stay in the
+// text box. nonus_backslash is HID usage 0x64, not the character "<".
+const MANUAL_GROUPS = [
+  ["F13–F24", Array.from({ length: 12 }, (_, i) => [`f${i + 13}`, `F${i + 13}`])],
+  ["Keypad", [
+    ["numlock", "Num Lock"], ["kp_divide", "Keypad /"], ["kp_multiply", "Keypad *"],
+    ["kp_minus", "Keypad −"], ["kp_plus", "Keypad +"], ["kp_enter", "Keypad Enter"],
+    ["kp_dot", "Keypad ."],
+    ...Array.from({ length: 10 }, (_, i) => [`kp_${i}`, `Keypad ${i}`]),
+  ]],
+  ["System", [
+    ["printscreen", "Print Screen"], ["scrolllock", "Scroll Lock"],
+    ["pause", "Pause"], ["menu", "Menu"], ["power", "Power"],
+    ["nonus_backslash", "Non-US \\"],
+  ]],
+];
+
 const KEY_FROM_BROWSER = {
   " ": "space", Enter: "enter", Escape: "esc", Backspace: "backspace",
   Tab: "tab", ArrowUp: "up", ArrowDown: "down", ArrowLeft: "left",
@@ -21,240 +77,478 @@ const KEY_FROM_BROWSER = {
 const el = (id) => document.getElementById(id);
 
 let options = null;
-let stored = new Map();     // what the pad currently holds
-let staged = new Map();     // what the user has built
+let stored = new Map();
+let staged = new Map();
 let selected = null;
 let capturing = false;
+let editorFor = null;
+let hostState = null;
 
-// ===================================================================================
-// Server
-// ===================================================================================
+function say(text, cls = "") {
+  const s = el("status");
+  s.textContent = text;
+  s.className = `status ${cls}`;
+}
 
-async function call(path, body) {
-  const res = await fetch(path, body
-    ? { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body) }
-    : {});
-  return res.json();
+function blankSlots() {
+  const slots = [];
+  for (let i = 1; i <= 12; i++) {
+    slots.push({ id: String(i), label: `Key ${i}`, group: "key", binding: "-" });
+  }
+  const labels = {
+    "top-press": "Top knob press", "bot-press": "Bottom knob press",
+    "top-cw": "Top knob right", "top-ccw": "Top knob left",
+    "bot-cw": "Bottom knob right", "bot-ccw": "Bottom knob left",
+  };
+  for (const [id, label] of Object.entries(labels)) {
+    slots.push({ id, label, group: "knob", binding: "-" });
+  }
+  return slots;
+}
+
+function padFirmware(text) {
+  el("device").textContent = text ? `Pad firmware ${text}` : "Pad firmware —";
 }
 
 async function refresh() {
-  say("Reading the pad...");
-  const data = await call("/api/state");
-  if (!data.ok) {
-    el("device").textContent = "Not connected";
-    el("device").className = "device bad";
-    return say(data.error, "bad");
+  if (!HidPad.opened()) {
+    padFirmware("");
+    el("device").className = "device";
+    return;
   }
-  options = data.options;
-  el("device").textContent =
-    `Connected \u2014 firmware ${data.firmware}, ${data.count} slots, `
-    + `${data.flash} bytes of storage`;
-  el("device").className = "device good";
-  adoptSlots(data.slots);
-  buildOptionLists();
-  render();
-  say("Ready.");
+  say("Reading…");
+  try {
+    const data = await HidPad.readConfig();
+    hostState = data;
+    showHost(data);
+    padFirmware(data.firmware);
+    el("device").className = "device good";
+    adoptSlots(data.slots);
+    if (!selected) selected = "1";
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    if (globalThis.onPadConnected) globalThis.onPadConnected(data);
+    say("");
+  } catch (err) {
+    padFirmware("");
+    el("device").className = "device bad";
+    say(err.message, "bad");
+  }
+}
+
+function showHost(data) {
+  fillHostOptions();
+  const layout = el("layout");
+  const os = el("os");
+  const host = data.host;
+  layout.value = host.layout;
+  os.value = host.os;
+  const ready = !!data.supported;
+  layout.disabled = !ready;
+  os.disabled = !ready;
+  el("matchHost").disabled = !ready;
+  const note = el("hostNote");
+  if (!ready) {
+    note.textContent = "Update the firmware first.";
+    note.className = "hint warn";
+  } else if (!host.confirmed) {
+    note.textContent = "Choose the keyboard.";
+    note.className = "hint warn";
+  } else {
+    note.textContent = "";
+    note.className = "hint";
+  }
+}
+
+function fillHostOptions() {
+  const layout = el("layout");
+  const os = el("os");
+  if (layout.options.length) return;
+  for (const id of PadBind.LAYOUTS) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = PadBind.LAYOUT_LABELS[id];
+    layout.appendChild(o);
+  }
+  for (const id of PadBind.OS_NAMES) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = PadBind.OS_LABELS[id];
+    os.appendChild(o);
+  }
+}
+
+function detectOs() {
+  const ua = navigator.userAgent || "";
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  const text = `${platform} ${ua}`.toLowerCase();
+  if (text.includes("win")) return "windows";
+  if (text.includes("mac")) return "macos";
+  return "linux";
+}
+
+async function detectLayout() {
+  if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return null;
+  const map = await navigator.keyboard.getLayoutMap();
+  const q = (map.get("KeyQ") || "").toLowerCase();
+  const z = (map.get("KeyZ") || "").toLowerCase();
+  if (q === "a") return "fr";
+  if (z === "y") return "de";
+  if (map.get("Backslash") === "#") return "uk";
+  return "us";
+}
+
+async function saveHost(layout, os) {
+  say("Saving…");
+  try {
+    if (layout === "auto") {
+      layout = await detectLayout();
+      os = detectOs();
+      if (!layout) throw new Error("Choose US, UK, German, or French.");
+    }
+    await HidPad.setHost(layout, os);
+    await refresh();
+    say("Saved.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 }
 
 function adoptSlots(slots) {
   stored = new Map(slots.map((s) => [s.id, s]));
   staged = new Map(slots.map((s) => [s.id, s.binding]));
-  if (!selected) selected = slots[0].id;
 }
 
-// ===================================================================================
-// Rendering
-// ===================================================================================
+function face(binding) {
+  if (!binding || binding === "-" || binding.toLowerCase() === "none") return "";
+  // Allow a wrap after + _ or : so labels break at words, not mid-token.
+  return binding.replace(/([_+:+])/g, "$1\u200b");
+}
 
-function slotButton(id) {
+function svg(name, attrs, parent) {
+  const node = document.createElementNS(SVGNS, name);
+  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, String(v));
+  if (parent) parent.appendChild(node);
+  return node;
+}
+
+function hitGroup(id, parent) {
+  const g = svg("g", { class: "hit", tabindex: "0", role: "button", "data-id": id }, parent);
   const info = stored.get(id);
   const binding = staged.get(id);
-  const btn = document.createElement("button");
-  btn.className = "slot";
-  if (id === selected) btn.classList.add("selected");
-  if (binding !== info.binding) btn.classList.add("dirty");
-  btn.innerHTML =
-    `<span class="num">${info.group === "key" ? "Key " + id : ""}</span>` +
-    `<span class="bind"></span>`;
-  btn.querySelector(".bind").textContent = binding === "-" ? "unbound" : binding;
-  btn.title = info.label;
-  btn.onclick = () => { selected = id; render(); };
-  return btn;
+  if (id === selected) g.classList.add("selected");
+  if (info && binding !== info.binding) g.classList.add("dirty");
+  g.setAttribute("aria-label", `${info ? info.label : id}: ${face(binding) || "empty"}`);
+  return g;
 }
 
-function render() {
-  const keys = el("keys");
-  keys.replaceChildren();
-  for (let i = 1; i <= 12; i++) keys.appendChild(slotButton(String(i)));
-
-  const knobs = el("knobs");
-  knobs.replaceChildren();
-  const blank = document.createElement("div");
-  knobs.appendChild(blank);
-  for (const head of ["Turn left", "Press", "Turn right"]) {
-    const d = document.createElement("div");
-    d.className = "head";
-    d.textContent = head;
-    knobs.appendChild(d);
+function drawPad() {
+  const wrap = el("pad");
+  const root = svg("svg", { viewBox: "0 0 880 356", role: "group", "aria-label": "Macropad" });
+  svg("rect", { class: "pcb", x: 12, y: 12, width: 856, height: 332, rx: 22 }, root);
+  for (const [x, y] of [[28, 28], [852, 28], [28, 328], [852, 328]]) {
+    svg("circle", { class: "hole", cx: x, cy: y, r: 5 }, root);
   }
-  for (const [name, ids] of KNOB_ROWS) {
-    const side = document.createElement("div");
-    side.className = "side";
-    side.textContent = name;
-    knobs.appendChild(side);
-    for (const id of ids) knobs.appendChild(slotButton(id));
+  const silk = svg("text", { class: "silk", x: 262, y: 338, "text-anchor": "middle" }, root);
+  silk.textContent = "SY181P2R03003A";
+
+  for (const key of KEY_GEO) {
+    const g = hitGroup(key.id, root);
+    svg("rect", { class: "face", x: key.x, y: key.y, width: key.w, height: key.h, rx: 10 }, g);
+    const num = svg("text", { class: "keynum", x: key.x + 10, y: key.y + 16 }, g);
+    num.textContent = key.id;
+    const fo = svg("foreignObject", {
+      x: key.x + 6, y: key.y + 22, width: key.w - 12, height: key.h - 28,
+    }, g);
+    const div = document.createElement("div");
+    const text = face(staged.get(key.id));
+    div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+    div.className = text ? "captext" : "captext empty";
+    div.textContent = text || "empty";
+    fo.appendChild(div);
   }
 
-  const dirty = [...staged].filter(([id, b]) => b !== stored.get(id).binding);
+  for (const knob of KNOBS) {
+    knob.parts.forEach((part, i) => {
+      const g = hitGroup(part.id, root);
+      const x = KNOB_X + i * (ZONE_W + ZONE_GAP);
+      const y = knob.y;
+      svg("rect", { class: "face", x, y, width: ZONE_W, height: ZONE_H, rx: 12 }, g);
+      const cap = svg("text", { class: "keynum", x: x + 8, y: y + 16 }, g);
+      cap.textContent = part.caption;
+      const fo = svg("foreignObject", { x: x + 6, y: y + 22, width: ZONE_W - 12, height: ZONE_H - 28 }, g);
+      const div = document.createElement("div");
+      div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
+      const text = face(staged.get(part.id));
+      div.className = text ? "zonetext" : "zonetext empty";
+      div.textContent = text || "empty";
+      fo.appendChild(div);
+    });
+  }
+
+  root.addEventListener("click", (e) => {
+    const g = e.target.closest("[data-id]");
+    if (g) selectSlot(g.getAttribute("data-id"));
+  });
+  root.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter" && e.key !== " ") return;
+    const g = e.target.closest("[data-id]");
+    if (!g) return;
+    e.preventDefault();
+    selectSlot(g.getAttribute("data-id"));
+  });
+  wrap.replaceChildren(root);
+}
+
+function selectSlot(id) {
+  if (!stored.has(id)) return;
+  selected = id;
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
+}
+
+function updateApply() {
+  const dirty = [...staged].filter(([id, b]) => stored.has(id) && b !== stored.get(id).binding);
   el("apply").disabled = dirty.length === 0;
   el("revert").disabled = dirty.length === 0;
-  el("apply").textContent = dirty.length
-    ? `Apply ${dirty.length} change${dirty.length > 1 ? "s" : ""}`
-    : "Apply to pad";
-
-  showEditor();
+  el("apply").textContent = dirty.length ? `Apply ${dirty.length}` : "Apply";
 }
 
-// ===================================================================================
-// Editor
-// ===================================================================================
+function splitChord(binding) {
+  if (binding === "+") return { mods: [], key: "+" };
+  if (binding.endsWith("++")) {
+    const head = binding.slice(0, -2);
+    return { mods: head ? head.split("+") : [], key: "+" };
+  }
+  const parts = binding.split("+");
+  const key = parts.pop();
+  return { mods: parts.filter(Boolean), key };
+}
 
-const RAW_OPTION = "__raw__";
+function normalize(text) {
+  const t = (text || "").trim();
+  if (!t || /^(none|-|off|unbound)$/i.test(t)) return "-";
+  return t;
+}
 
-function buildOptionLists() {
-  fill(el("keySelect"), options.keys);
-  const raw = document.createElement("option");
-  raw.value = RAW_OPTION;
-  raw.textContent = "custom HID usage...";
-  el("keySelect").appendChild(raw);
-  el("rawUsage").max = options.rawMax;
-  fill(el("conSelect"), options.consumer);
-  fill(el("mouseSelect"), options.mouseButtons.concat(options.mouseDeltas));
+function display(binding) {
+  return !binding || binding === "-" ? "" : binding;
+}
 
+function bindingKey(binding) {
+  if (!binding || binding === "-") return "";
+  return splitChord(binding).key;
+}
+
+function bindingKind(binding) {
+  if (!binding || binding === "-") return "none";
+  if (!options) return "key";
+  const key = bindingKey(binding).toUpperCase();
+  if (options.consumer.includes(key)) return "con";
+  if (options.mouseButtons.includes(key)) return "mouse";
+  const base = key.split(":")[0];
+  if (options.mouseDeltas.includes(base)) return "delta";
+  return "key";
+}
+
+function addOption(select, value, label) {
+  const o = document.createElement("option");
+  o.value = value;
+  o.textContent = label;
+  select.appendChild(o);
+}
+
+function consumerGroups() {
+  if (!options) return [];
+  const buckets = [
+    ["Volume and media", (n) => n.startsWith("VOL_") || n.startsWith("MEDIA_")],
+    ["Apps and browser", (n) => n.startsWith("APP_") || n.startsWith("WEB_")],
+    ["Brightness and power", (n) => n.startsWith("BRIGHT_") || n.startsWith("SYS_")],
+  ];
+  return buckets.map(([title, pred]) => [
+    title,
+    options.consumer.filter(pred).map((n) => [n, n.replaceAll("_", " ")]),
+  ]).filter(([, items]) => items.length);
+}
+
+function buildPickers() {
   const mods = el("mods");
   mods.replaceChildren();
   for (const name of options.modifiers) {
     const b = document.createElement("button");
+    b.type = "button";
     b.textContent = name;
     b.dataset.mod = name;
-    b.onclick = () => { b.classList.toggle("on"); commitEditor(); };
+    b.onclick = () => toggleMod(name);
     mods.appendChild(b);
   }
+
+  const fn = el("function");
+  fn.replaceChildren();
+  addOption(fn, "", "Custom input");
+  addOption(fn, "__raw__", "RAW input");
+  const groups = MANUAL_GROUPS.concat(consumerGroups(), [
+    ["Mouse buttons", options.mouseButtons.map((n) => [n, n.replaceAll("_", " ")])],
+    ["Scroll and pointer", options.mouseDeltas.map((n) => [n, n.replaceAll("_", " ")])],
+  ]);
+  for (const [title, items] of groups) {
+    const group = document.createElement("optgroup");
+    group.label = title;
+    for (const [value, label] of items) addOption(group, value, label);
+    fn.appendChild(group);
+  }
+  el("rawUsage").max = options.rawMax;
 }
 
-function fill(select, values) {
-  select.replaceChildren();
-  for (const v of values) {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = v;
-    select.appendChild(o);
+function previewText(binding) {
+  const shown = display(binding);
+  return shown || "nothing";
+}
+
+function syncPickers(binding) {
+  const fn = el("function");
+  const rawRow = el("rawRow");
+  const stepsRow = el("stepsRow");
+  const kind = bindingKind(binding);
+  rawRow.hidden = true;
+  stepsRow.hidden = true;
+  if (!fn.options.length) return;
+
+  const key = bindingKey(binding).toUpperCase();
+  if (key.startsWith("RAW:")) {
+    fn.value = "__raw__";
+    rawRow.hidden = false;
+    el("rawUsage").value = key.slice(4);
+    return;
+  }
+  if (kind === "delta") {
+    const base = key.split(":")[0];
+    fn.value = base;
+    stepsRow.hidden = false;
+    el("steps").value = parseInt(key.split(":")[1] || "1", 10);
+    return;
+  }
+  if ([...fn.options].some((o) => o.value === key)) {
+    fn.value = key;
+    return;
+  }
+  fn.value = "";
+}
+
+function syncMods(binding) {
+  const kind = bindingKind(binding);
+  const blocked = kind === "con";
+  const mods = !blocked && binding && binding !== "-"
+    ? splitChord(binding).mods.map((m) => m.toLowerCase())
+    : [];
+  for (const b of el("mods").children) {
+    b.disabled = blocked;
+    b.title = blocked ? "Media keys have no modifier." : "";
+    b.classList.toggle("on", mods.includes(b.dataset.mod));
   }
 }
 
-// Parse a stored binding back into editor state, so selecting a slot shows what
-// it currently does rather than a blank form.
 function showEditor() {
-  const binding = staged.get(selected);
+  if (!selected || !stored.has(selected)) {
+    el("editor").hidden = true;
+    el("editorEmpty").hidden = false;
+    return;
+  }
+  el("editor").hidden = false;
+  el("editorEmpty").hidden = true;
   const info = stored.get(selected);
   el("editing").textContent = info.label;
-  el("editor").hidden = false;
-  el("preview").textContent = binding === "-" ? "nothing" : binding;
-
-  const base = binding.split(":")[0];
-  let kind = "key";
-  if (binding === "-") kind = "none";
-  else if (options.consumer.includes(binding)) kind = "con";
-  else if (options.mouseButtons.includes(binding) || options.mouseDeltas.includes(base))
-    kind = "mouse";
-  setKind(kind, false);
-
-  if (kind === "key") {
-    const parts = binding.split("+");
-    const key = parts.pop();
-    for (const b of el("mods").children)
-      b.classList.toggle("on", parts.includes(b.dataset.mod));
-    if (key.startsWith("RAW:")) {
-      el("keySelect").value = RAW_OPTION;
-      el("rawUsage").value = key.slice(4);
-    } else if (options.keys.includes(key)) {
-      el("keySelect").value = key;
-    }
-    el("rawRow").hidden = el("keySelect").value !== RAW_OPTION;
-  } else if (kind === "con") {
-    el("conSelect").value = binding;
-  } else if (kind === "mouse") {
-    el("mouseSelect").value = base;
-    const isDelta = options.mouseDeltas.includes(base);
-    el("stepsRow").hidden = !isDelta;
-    if (isDelta) el("steps").value = parseInt(binding.split(":")[1] || "1", 10);
+  const binding = staged.get(selected);
+  if (editorFor !== selected) {
+    el("binding").value = display(binding);
+    editorFor = selected;
+  }
+  el("preview").textContent = previewText(binding);
+  if (options) {
+    syncPickers(binding);
+    syncMods(binding);
   }
 }
 
-function setKind(kind, commit = true) {
-  for (const b of el("tabs").children)
-    b.classList.toggle("active", b.dataset.kind === kind);
-  for (const p of document.querySelectorAll(".pane"))
-    p.hidden = p.dataset.kind !== kind;
-  if (commit) commitEditor();
-}
-
-function activeKind() {
-  return el("tabs").querySelector(".active").dataset.kind;
-}
-
-// Build a binding string from the form. The server parses it, so the browser
-// never chooses raw numbers.
-function commitEditor() {
-  const kind = activeKind();
-  let binding = "none";
-
-  if (kind === "key") {
-    const mods = [...el("mods").children]
-      .filter((b) => b.classList.contains("on"))
-      .map((b) => b.dataset.mod);
-    let key = el("keySelect").value;
-    const isRaw = key === RAW_OPTION;
-    el("rawRow").hidden = !isRaw;
-    if (isRaw) {
-      const n = Math.max(1, Math.min(options.rawMax,
-                                     parseInt(el("rawUsage").value, 10) || 1));
-      key = `RAW:${n}`;
-    }
-    binding = mods.concat([key]).join("+");
-  } else if (kind === "con") {
-    binding = el("conSelect").value;
-  } else if (kind === "mouse") {
-    const choice = el("mouseSelect").value;
-    const isDelta = options.mouseDeltas.includes(choice);
-    el("stepsRow").hidden = !isDelta;
-    binding = choice;
-    if (isDelta) {
-      const n = Math.max(1, Math.min(127, parseInt(el("steps").value, 10) || 1));
-      binding = `${choice}:${n}`;
-    }
-  }
-
+function commitText(text, { fromField = false } = {}) {
+  if (!selected) return;
+  const binding = normalize(text);
   staged.set(selected, binding);
-  render();
+  drawPad();
+  updateApply();
+  el("preview").textContent = previewText(binding);
+  if (!fromField) el("binding").value = display(binding);
+  if (options) {
+    syncPickers(binding === "-" ? "" : binding);
+    syncMods(binding === "-" ? "" : binding);
+  }
 }
 
-// ===================================================================================
-// Actions
-// ===================================================================================
+function toggleMod(name) {
+  if (bindingKind(staged.get(selected)) === "con") return;
+  const text = el("binding").value.trim();
+  const { mods, key } = text ? splitChord(text) : { mods: [], key: "" };
+  const have = new Set(mods.map((m) => m.toLowerCase()));
+  if (have.has(name)) have.delete(name);
+  else have.add(name);
+  const ordered = options.modifiers.filter((m) => have.has(m));
+  const body = key && !options.modifiers.includes(key.toLowerCase()) ? key : "";
+  commitText(body ? [...ordered, body].join("+") : (ordered.length ? `${ordered.join("+")}+` : ""));
+}
+
+function keptMods(allow) {
+  if (!allow) return [];
+  const text = el("binding").value.trim();
+  if (!text) return [];
+  return splitChord(text).mods.filter((m) => options.modifiers.includes(m.toLowerCase()));
+}
+
+function onFunction() {
+  const value = el("function").value;
+  if (!value) {
+    el("binding").focus();
+    return;
+  }
+  if (value === "__raw__") {
+    const n = Math.max(1, Math.min(options.rawMax, parseInt(el("rawUsage").value, 10) || 1));
+    el("rawUsage").value = n;
+    const mods = keptMods(true);
+    commitText(mods.length ? `${mods.join("+")}+RAW:${n}` : `RAW:${n}`);
+    return;
+  }
+  if (options.mouseDeltas.includes(value)) {
+    const n = Math.max(1, Math.min(127, parseInt(el("steps").value, 10) || 1));
+    el("steps").value = n;
+    const mods = keptMods(true);
+    commitText(mods.length ? `${mods.join("+")}+${value}:${n}` : `${value}:${n}`);
+    return;
+  }
+  const allow = !options.consumer.includes(value);
+  const mods = keptMods(allow);
+  commitText(mods.length ? `${mods.join("+")}+${value}` : value);
+}
 
 async function apply() {
   const changes = {};
   for (const [id, binding] of staged)
-    if (binding !== stored.get(id).binding) changes[id] = binding;
+    if (stored.has(id) && binding !== stored.get(id).binding) changes[id] = binding;
 
-  say("Writing to the pad...");
-  const res = await call("/api/apply", { changes });
-  if (!res.ok) return say(res.error, "bad");
-  adoptSlots(res.slots);
-  render();
-  say(`Stored on the pad. Bindings are kept when it is unplugged.`, "good");
+  say("Saving…");
+  try {
+    const slots = await HidPad.writeChanges(changes);
+    adoptSlots(slots);
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    say("Saved.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 }
 
 function download() {
@@ -270,7 +564,7 @@ function download() {
   a.download = "macropad-profile.json";
   a.click();
   URL.revokeObjectURL(url);
-  say("Profile saved.");
+  say("Saved.", "good");
 }
 
 async function upload(file) {
@@ -279,80 +573,123 @@ async function upload(file) {
     if (doc.format !== 2) throw new Error(`profile is format v${doc.format}, expected v2`);
     for (const [id, binding] of Object.entries(doc.bindings || {}))
       if (staged.has(id)) staged.set(id, binding);
-    render();
-    say("Profile loaded. Press Apply to store it on the pad.");
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    say("Loaded. Apply to keep it.", "good");
   } catch (err) {
-    say(`Could not read that profile: ${err.message}`, "bad");
+    say("Could not read that file.", "bad");
   }
 }
 
-function say(text, cls = "") {
-  const s = el("status");
-  s.textContent = text;
-  s.className = `status ${cls}`;
-}
-
-// ===================================================================================
-// Wiring
-// ===================================================================================
-
-el("tabs").onclick = (e) => { if (e.target.dataset.kind) setKind(e.target.dataset.kind); };
-el("keySelect").onchange = commitEditor;
-el("rawUsage").onchange = commitEditor;
-el("conSelect").onchange = commitEditor;
-el("mouseSelect").onchange = commitEditor;
-el("steps").onchange = commitEditor;
+el("binding").addEventListener("input", () => commitText(el("binding").value, { fromField: true }));
+el("function").onchange = onFunction;
+el("steps").onchange = onFunction;
+el("rawUsage").onchange = onFunction;
+el("clear").onclick = () => commitText("");
 
 el("capture").onclick = () => {
-  capturing = true;
-  el("capture").textContent = "Press a key...";
-  say("Listening for a keypress.");
+  capturing = !capturing;
+  el("capture").textContent = capturing ? "Listening…" : "Capture";
+  if (capturing) {
+    el("binding").blur();
+    say("Press a key.");
+  } else {
+    say("Capture cancelled.");
+  }
 };
 
-window.addEventListener("keydown", (e) => {
+el("layout").onchange = () => saveHost(el("layout").value, el("os").value);
+el("os").onchange = () => saveHost(el("layout").value, el("os").value);
+el("matchHost").onclick = () => saveHost("auto", "");
+
+window.addEventListener("keydown", async (e) => {
   if (!capturing) return;
   e.preventDefault();
   capturing = false;
-  el("capture").textContent = "Capture a keypress";
+  el("capture").textContent = "Capture";
 
-  const name = KEY_FROM_BROWSER[e.key] ||
-               (e.key.length === 1 ? e.key.toLowerCase() : e.key.toLowerCase());
-  if (!options.keys.includes(name))
-    return say(`'${e.key}' has no name in the list. Choose "custom HID usage" `
-               + `and enter the key position number instead.`, "bad");
-
-  el("keySelect").value = name;
-  for (const b of el("mods").children) {
-    const on = { ctrl: e.ctrlKey, shift: e.shiftKey, alt: e.altKey, win: e.metaKey }
-      [b.dataset.mod];
-    if (on !== undefined) b.classList.toggle("on", on);
-  }
-  setKind("key");
+  const binding = PadBind.captureBinding(KEY_FROM_BROWSER[e.key] || e.key, {
+    shift: e.shiftKey,
+    ctrl: e.ctrlKey,
+    alt: e.altKey,
+    meta: e.metaKey,
+    altgr: e.getModifierState("AltGraph"),
+  });
+  if (!binding) return say("Type the binding, or pick it under Other.", "bad");
+  commitText(binding);
+  say(`Captured ${binding}.`, "good");
 });
 
 el("apply").onclick = apply;
-el("reload").onclick = refresh;
+el("reload").onclick = () => { connectOrRefresh().catch((err) => say(err.message, "bad")); };
 el("revert").onclick = () => {
   for (const [id, info] of stored) staged.set(id, info.binding);
-  render();
-  say("Changes discarded.");
+  editorFor = null;
+  drawPad();
+  showEditor();
+  updateApply();
+  say("Discarded.");
 };
 el("defaults").onclick = async () => {
   if (!confirm("Replace every binding with the defaults?")) return;
-  const res = await call("/api/reset", {});
-  if (!res.ok) return say(res.error, "bad");
-  adoptSlots(res.slots);
-  render();
-  say("Defaults restored.", "good");
+  try {
+    const slots = await HidPad.reset();
+    adoptSlots(slots);
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    say("Defaults restored.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 };
 el("boot").onclick = async () => {
-  if (!confirm("Reboot the pad into its bootloader for reflashing?")) return;
-  const res = await call("/api/bootloader", {});
-  say(res.ok ? "In the bootloader. Run: python tools\\chflash.py padfw.bin --wait 30"
-             : res.error, res.ok ? "good" : "bad");
+  if (!confirm("Reboot into the bootloader?")) return;
+  try {
+    await HidPad.bootloader();
+    padFirmware("");
+    el("device").className = "device";
+    say("Bootloader. Run chflash now.");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 };
 el("save").onclick = download;
 el("load").onclick = () => el("file").click();
 el("file").onchange = (e) => { if (e.target.files[0]) upload(e.target.files[0]); };
 
-refresh();
+async function connectOrRefresh() {
+  if (!navigator.hid) {
+    throw new Error("Use Chrome or Edge.");
+  }
+  if (!HidPad.opened()) await HidPad.connect();
+  await refresh();
+}
+
+el("connect").onclick = () => {
+  connectOrRefresh().catch((err) => {
+    padFirmware("");
+    el("device").className = "device bad";
+    say(err.message, "bad");
+  });
+};
+
+fillHostOptions();
+adoptSlots(blankSlots());
+selected = "1";
+options = PadBind.catalogue();
+buildPickers();
+drawPad();
+showEditor();
+if (!navigator.hid) {
+  padFirmware("");
+  el("device").className = "device bad";
+  el("connect").disabled = true;
+  say("Use Chrome or Edge.", "bad");
+} else {
+  padFirmware("");
+  say("");
+}

@@ -1,131 +1,81 @@
 # Flashing
 
-The CH552 has a bootloader in ROM that cannot be erased. A bad flash is
-recoverable, so there is no realistic way to brick the board by writing the
-wrong firmware to it.
+Open [`tools/webui/index.html`](../tools/webui/index.html) in Chrome or Edge
+and click **Connect**. The header shows Version 5. Firefox and Safari cannot
+connect.
 
-Be aware of one thing before starting: **the stock firmware cannot be backed
-up.** The bootloader has no read command, and the verify command cannot be
-abused as a substitute (it answers only once per session and does not
-distinguish a match from a mismatch usefully). Flashing this firmware is a
-one-way trip. The stock configuration tool will no longer work with the pad.
+## Already on 1.2.2 or newer
 
-## 1. Install the prerequisites
+1. Click **Connect**.
+2. Open **Firmware** and choose `firmware/prebuilt/padfw-1.2.3.web.bin` (8168 bytes).
+3. Click **Update** and leave the cable in until the pad reboots.
 
-Python 3.8 or newer, plus:
+## Not yet able to update from the page
+
+Stock firmware, 1.0.0, 1.1.0 and 1.2.0 cannot take an update from the page.
+Flash the full image once:
+
+`firmware/prebuilt/padfw-1.2.3.bin` (13376 bytes).
+
+The stock firmware cannot be backed up. This replaces it, and the stock
+configuration tool will no longer talk to the pad.
+
+Python 3.8 or newer. This install is only for the flash. The page does not use it.
 
 ```
-pip install pyusb libusb-package hidapi
+pip install pyusb libusb-package
 ```
 
-`pyusb` and `libusb-package` are for flashing, `hidapi` for configuring
-afterwards.
+**Windows, once.** The bootloader has no driver. Unplug the pad, hold the
+top-left key, plug in, and keep the key held. In
+[Zadig](https://zadig.akeo.ie/) choose **Options → List All Devices**, select
+USB ID **`4348:55E0`**, pick **libusb-win32** (not WinUSB) and install the
+driver. If Device Manager shows error code 10 afterwards, unplug and replug.
 
-To build from source rather than use the prebuilt binary you also need
-[SDCC](https://sdcc.sourceforge.net/) on your `PATH`.
-
-## 2. Install the bootloader driver (Windows)
-
-Windows has no driver for the CH552 bootloader, so one has to be assigned with
-[Zadig](https://zadig.akeo.ie/). This is needed once.
-
-The catch is that the bootloader is only present while the chip is in bootloader
-mode, so it has to be showing before Zadig can see it.
-
-1. Unplug the pad.
-2. Hold the **top-left key** and plug the cable in, keeping it held. See
-   section 3 if that does not work.
-3. Start Zadig within a few seconds, choose **Options &rarr; List All Devices**,
-   and select the entry with USB ID **`4348:55E0`**.
-4. Choose **libusb-win32** in the driver box on the right and click
-   **Replace Driver** or **Install Driver**.
-
-Pick `libusb-win32`, not WinUSB. Both appear to work at first, but WinUSB times
-out on the actual transfers with this bootloader.
-
-If the device afterwards shows in Device Manager with a warning triangle and
-error code 10, unplug and replug it. Windows sometimes keeps a stale device node
-after a driver swap.
-
-On Linux no driver is needed, just a udev rule granting access:
+**Linux.** A udev rule is enough:
 
 ```
 echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", MODE="666"' | sudo tee /etc/udev/rules.d/99-ch55x.rules
 sudo service udev restart
 ```
 
-## 3. Enter the bootloader
-
-Three ways, in order of convenience:
-
-**From software**, once this firmware is already installed:
+Start the command, then enter the bootloader. It only stays up for a few
+seconds:
 
 ```
-python tools/padconf.py bootloader
+python tools/chflash.py firmware/prebuilt/padfw-1.2.3.bin --wait 30
 ```
 
-This is the normal route for updates and needs no physical access at all.
+Hold the **top-left key** while plugging the cable in. If the key does nothing,
+bridge the **J2** pads next to the CH552 while plugging in, then release.
+The output ends with the chip id, the bootloader version, the 13376-byte
+image, and `Done`.
 
-**Hold the top-left key while plugging in.** Also only works once this firmware
-is installed.
+The pad restarts as a keyboard. Open the page and click **Connect**.
 
-**Bridge the J2 pads while plugging in.** The fallback that always works,
-including on a pad still running stock firmware or one whose firmware is too
-broken to respond. J2 is the two-pad header next to the CH552G; short them with
-tweezers or a paperclip as the cable goes in, then release.
+## Building from source
 
-In every case the bootloader stays available for only a few seconds before
-handing over to the firmware, which is why the flashing command below takes a
-`--wait` option: start it first, then trigger the bootloader.
-
-## 4. Flash
-
-```
-python tools/chflash.py firmware/prebuilt/padfw-1.0.0.bin --wait 30
-```
-
-Run that, then trigger the bootloader by whichever method above. Expected
-output:
-
-```
-Waiting up to 30s for the bootloader. Plug the cable in now ...
-Connected via the libusb-win32 backend.
-Chip 0x52, bootloader v2.40
-Flashing padfw-1.0.0.bin (5784 bytes)
-Done. The pad restarts on the new firmware.
-```
-
-The pad restarts as a keyboard a moment later. Existing bindings survive an
-update: the keymap lives in data flash, which the firmware erase does not touch.
-
-## 5. Building from source
+[SDCC](https://sdcc.sourceforge.net/) on `PATH`, then:
 
 ```
 cd firmware
 python build.py padfw.c
-python build.py padfw.c --flash
 ```
 
-`build.py` replaces the upstream makefile so that no `make`, `objcopy` or `awk`
-is needed on Windows. It also works around an SDCC packaging quirk: on Windows
-the `cc1` executable ships without a `.exe` extension, which stops
-`CreateProcess` from finding it, so the build copies it into a private shim
-directory rather than modifying the SDCC installation.
+`discovery.c` builds the same way. It maps unknown hardware and is described
+in [`HARDWARE.md`](HARDWARE.md).
 
-`discovery.c` builds the same way. That one is for mapping unknown hardware and
-is described in [`HARDWARE.md`](HARDWARE.md).
+## If the flash does not stick
 
-## Troubleshooting
+**`no CH55x bootloader found`** — start `chflash.py --wait` before triggering
+the bootloader.
 
-**`no CH55x bootloader found`** &mdash; the device was not in bootloader mode
-when the tool looked. Use `--wait` and trigger the bootloader afterwards.
+**Timeouts during transfer** — WinUSB instead of libusb-win32. Redo the Zadig
+step.
 
-**Timeouts or pipe errors during transfer** &mdash; almost always the WinUSB
-driver instead of libusb-win32. Redo step 2.
+**The pad is an unrecognized device, or it stays a bootloader** — hold the
+top-left key, or bridge J2, and flash the full `padfw-1.2.3.bin` again.
+Do not send the `.web.bin` to the ROM bootloader.
 
-**The bootloader stops responding after repeated attempts** &mdash; it can wedge
-if hammered. Unplug and replug to reset it.
-
-**Flashing succeeds but the pad does nothing** &mdash; bridge J2 while plugging
-in and reflash. The ROM bootloader is intact regardless of what is in code
-flash, so this always works.
+**A failed update from the page** — unplug the pad and plug it back in. If it
+still will not connect, flash the full image with the steps above.

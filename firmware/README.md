@@ -90,8 +90,29 @@ the 128 available:
 | 2 | Format version |
 | 3 | Action count |
 | 4 | CRC-8 over the action block |
-| 5 | Reserved |
+| 5 | Host profile: layout in bits 0-2, confirmed in bit 3, OS in bits 4-5 |
 | 6 + 4n | Action *n*: type, modifier mask, code low, code high |
+
+The host profile is how a stored character becomes a HID report. `us`, `uk`,
+`de`, `fr` and `es` each have a table generated from `tools/layouts.py`. Letter and
+digit shortcuts use the key that layout labels with that character.
+`layout_plan.c` is the decision, checked against the Python tables by
+`tools/test_layout.py`, and `layout.c` is what actually sends the reports.
+Codes with bit 15 set are Unicode scalars; codes from 136 are raw HID usages
+and are not translated. A character the layout cannot type is an Alt+numpad
+sequence on Windows or Ctrl+Shift+U on Linux.
+
+## Firmware update
+
+The browser updater writes only `0x0000`-`0x1FFF`. `0x2000` stages the new
+reset page and `0x2400`-`0x37FF` is the USB stack plus the writer, installed
+by `chflash` and not replaced by a `.web.bin`. `firmware/iapvec.asm` is the
+six-byte jump table at `0x2400` and the interrupt table at address 0. Reset
+(`0x0000`) and the USB vector (`0x0043`, not `0x0040`) are `ljmp`s to those
+fixed addresses, so a later image still lands in the resident code. SDCC does
+not emit that USB slot itself: the ISR is not in the file that contains main. Data-flash byte 127 is `0x00` while an update has erased application
+pages; the reset stub then stays in the updater instead of jumping at a
+half-written image. `tools/test_iap.py` checks the image layout.
 
 Action types are unbound, keyboard, consumer and mouse. Keyboard actions carry a
 bitmask of the eight modifiers, so any chord is expressible. Mouse actions split
@@ -100,8 +121,8 @@ wheel, horizontal pan and pointer movement.
 
 The format version and the firmware version move independently. Most firmware
 releases will not disturb stored keymaps, and bumping the format version forces
-every pad to rebuild from defaults, so only change it when the layout really
-does change.
+every pad to rebuild from defaults, so only change it when the bytes on flash
+really move.
 
 Data flash is used rather than code flash because code flash is rated for only
 about 200 erase cycles. Storing a user-editable keymap there would spend the
@@ -118,19 +139,10 @@ inheriting junk. Rejections come back as a status code the host reports.
 Stored data gets the same treatment on boot. The header, the CRC-8 and every
 individual action are checked, and any failure discards the lot and rewrites the
 defaults. A plain sum would have done for detecting bit rot, but the realistic
-failure is a write cut short by an unplug, which leaves a partly updated block;
+failure is a write cut short by an unplug, which leaves a partly updated block.
 CRC-8 catches that. Writes order the payload before the header for the same
 reason, so an interrupted save leaves the magic invalid and the next boot
 rebuilds cleanly rather than running half a keymap.
-
-```
-python ../tools/padselftest.py
-```
-
-That drives deliberately malformed requests straight at the device, bypassing
-the host-side checks, and confirms each one is refused. It also damages the
-stored checksum on purpose so the recovery path can be exercised rather than
-merely assumed: replug the pad afterwards and it will come back on defaults.
 
 ## Two traps in the data-flash driver
 

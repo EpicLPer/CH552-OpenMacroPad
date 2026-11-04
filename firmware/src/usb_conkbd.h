@@ -7,12 +7,23 @@
 #include "usb_hid.h"
 
 // Functions
-#define KBD_init() HID_init()         // init keyboard
+void KBD_init(void);                  // init keyboard and report IDs
 void KBD_press(uint8_t key);          // press a key on keyboard
 void KBD_release(uint8_t key);        // release a key on keyboard
 void KBD_type(uint8_t key);           // press and release a key on keyboard
 void KBD_releaseAll(void);            // release all keys on keyboard
 void KBD_print(char* str);            // type some text on the keyboard
+
+// Replace the keyboard report with exactly these modifiers and key usages.
+// n == 0 leaves the key slots empty. This is what the layout emitter uses;
+// KBD_press remains for the discovery firmware's ASCII typing.
+void KBD_sync(uint8_t mods, uint8_t *hids, uint8_t n);
+
+// Latched LED output report (Num Lock in bit 0). KBD_getState reads this.
+// Valid is 0 until the host has sent a keyboard LED report.
+extern __xdata uint8_t KBD_ledState;
+extern __xdata uint8_t KBD_ledValid;
+void KBD_noteLeds(uint8_t leds);
 
 void CON_press(uint16_t key);         // press a consumer key on keyboard
 void CON_release(uint16_t key);       // release a consumer key on keyboard

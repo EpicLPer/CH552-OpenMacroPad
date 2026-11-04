@@ -53,12 +53,6 @@
 #include "src/tm1650.h"
 #include "src/usb_conkbd.h"
 
-// Prototypes for used interrupts
-void USB_interrupt(void);
-void USB_ISR(void) __interrupt(INT_NO_USB) {
-  USB_interrupt();
-}
-
 #pragma disable_warning 110
 
 // Roughly two minutes at the loop period below, after which output is gated on

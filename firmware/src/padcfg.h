@@ -29,6 +29,7 @@
 
 // Modifiers are a bitmask so a binding can be a real chord such as
 // ctrl+shift+esc, not just one modifier plus a key.
+#ifndef MOD_LCTRL
 #define MOD_LCTRL       0x01
 #define MOD_LSHIFT      0x02
 #define MOD_LALT        0x04
@@ -37,6 +38,7 @@
 #define MOD_RSHIFT      0x20
 #define MOD_RALT        0x40
 #define MOD_RGUI        0x80
+#endif
 
 // For ACT_MOUSE the code splits into a subtype in the high byte and a value in
 // the low byte: a button mask, or a signed delta for the relative axes.
@@ -60,7 +62,7 @@
 
 typedef struct {
   uint8_t  type;
-  uint8_t  mod;                         // MOD_* bitmask, keyboard actions only
+  uint8_t  mod;                         // keyboard modifier bitmask
   uint16_t code;
 } action_t;
 
@@ -75,8 +77,8 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // changes; the two move independently, since most firmware releases will not
 // disturb stored keymaps.
 #define FW_VERSION_MAJOR 1
-#define FW_VERSION_MINOR 0
-#define FW_VERSION_PATCH 0
+#define FW_VERSION_MINOR 2
+#define FW_VERSION_PATCH 3
 
 #define CFG_REPORT_ID   3
 #define CFG_MAGIC0      'P'
@@ -91,6 +93,20 @@ extern __xdata action_t Keymap[ACT_COUNT];
 #define CMD_DUMP        0x06            // raw data-flash read, for diagnostics
 #define CMD_CORRUPT     0x07            // deliberately damage the checksum, to
                                         // prove the recovery path works
+#define CMD_SET_HOST    0x08            // which keyboard layout and OS to type for
+
+// Host profile, stored in the header byte that used to be reserved. Bindings
+// themselves stay layout-neutral; this byte says how to emit them.
+//   bits 0-2  layout: 0 US, 1 UK, 2 German, 3 French, 4 Spanish
+//   bit  3    1 once a tool has confirmed the value
+//   bits 4-5  OS: 0 Windows, 1 Linux, 2 macOS. macOS selects Apple's own
+//             input source. Windows and Linux share the PC chords. The OS is
+//             also what types a character the layout has no key for.
+//   bits 6-7  must be 0
+#define HOST_LAY_MASK   0x07
+#define HOST_CONFIRMED  0x08
+#define HOST_OS_SHIFT   4
+#define HOST_OS_MASK    0x30
 
 // Reply status codes, returned in byte 7.
 #define ST_OK           1
@@ -101,3 +117,4 @@ extern __xdata action_t Keymap[ACT_COUNT];
 void PADCFG_init(void);                 // load from data flash, or apply defaults
 void PADCFG_onReport(void);             // called from the USB interrupt
 void PADCFG_task(void);                 // called from the main loop
+uint8_t PADCFG_hostProfile(void);       // layout and OS, see HOST_* above

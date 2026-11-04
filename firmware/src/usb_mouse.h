@@ -16,6 +16,7 @@
 #define MOUSE_BTN_BACK      0x08
 #define MOUSE_BTN_FORWARD   0x10
 
+void MOUSE_init(void);          // set the report id; XDATA initialisers are not reliable
 void MOUSE_press(uint8_t buttons);
 void MOUSE_release(uint8_t buttons);
 void MOUSE_releaseAll(void);
