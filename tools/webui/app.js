@@ -76,13 +76,12 @@ let staged = new Map();
 let selected = null;
 let capturing = false;
 let editorFor = null;
+let hostState = null;
 
-async function call(path, body) {
-  const res = await fetch(path, body
-    ? { method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body) }
-    : {});
-  return res.json();
+function say(text, cls = "") {
+  const s = el("status");
+  s.textContent = text;
+  s.className = `status ${cls}`;
 }
 
 function blankSlots() {
@@ -102,71 +101,66 @@ function blankSlots() {
 }
 
 async function refresh() {
-  say("Reading the pad...");
-  const data = await call("/api/state");
-  if (!data.ok) {
+  if (!HidPad.opened()) {
     el("device").textContent = "Not connected";
-    el("device").className = "device bad";
-    if (!stored.size) adoptSlots(blankSlots());
-    drawPad();
-    return say(data.error, "bad");
-  }
-  options = data.options;
-  showHost(data.host);
-  el("device").textContent =
-    `Connected — firmware ${data.firmware}, ${data.count} slots`;
-  el("device").className = "device good";
-  adoptSlots(data.slots);
-  buildPickers();
-  if (!selected) selected = "1";
-  editorFor = null;
-  drawPad();
-  showEditor();
-  updateApply();
-  say("Ready.");
-}
-
-function showHost(host) {
-  const bar = el("hostbar");
-  if (!host) {
-    bar.hidden = true;
+    el("device").className = "device";
     return;
   }
+  say("Reading the pad...");
+  try {
+    const data = await HidPad.readConfig();
+    hostState = data;
+    showHost(data);
+    el("device").textContent = `Connected — firmware ${data.firmware}, ${data.count} slots`;
+    el("device").className = "device good";
+    adoptSlots(data.slots);
+    if (!selected) selected = "1";
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    if (globalThis.onPadConnected) globalThis.onPadConnected(data);
+    say("Ready.");
+  } catch (err) {
+    el("device").textContent = "Not connected";
+    el("device").className = "device bad";
+    say(err.message, "bad");
+  }
+}
+
+function showHost(data) {
+  const bar = el("hostbar");
   bar.hidden = false;
   const layout = el("layout");
   const os = el("os");
-  layout.replaceChildren();
-  os.replaceChildren();
-  for (const item of host.layouts) {
-    const o = document.createElement("option");
-    o.value = item.id;
-    o.textContent = item.label;
-    layout.appendChild(o);
+  if (!layout.options.length) {
+    for (const id of PadBind.LAYOUTS) {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = PadBind.LAYOUT_LABELS[id];
+      layout.appendChild(o);
+    }
+    for (const id of PadBind.OS_NAMES) {
+      const o = document.createElement("option");
+      o.value = id;
+      o.textContent = PadBind.OS_LABELS[id];
+      os.appendChild(o);
+    }
   }
-  for (const item of host.oses) {
-    const o = document.createElement("option");
-    o.value = item.id;
-    o.textContent = item.label;
-    os.appendChild(o);
-  }
+  const host = data.host;
   layout.value = host.layout;
   os.value = host.os;
-  layout.disabled = !host.supported;
-  os.disabled = !host.supported;
-  el("matchHost").hidden = !host.supported || !host.detectedLayout;
+  layout.disabled = !data.supported;
+  os.disabled = !data.supported;
+  el("matchHost").hidden = !data.supported;
   const note = el("hostNote");
-  if (!host.supported) {
-    note.textContent = "This firmware still types for a US keyboard. Reflash 1.1.0 or newer.";
+  if (!data.supported) {
+    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.0.";
     note.className = "hint warn";
     return;
   }
-  if (host.detectedLayout &&
-      (host.detectedLayout !== host.layout || host.detectedOs !== host.os)) {
-    const found = host.layouts.find((item) => item.id === host.detectedLayout);
-    note.textContent = `This computer looks like ${found ? found.label : host.detectedLayout}.`;
-    note.className = "hint warn";
-  } else if (!host.confirmed) {
-    note.textContent = "Not confirmed yet. Match this computer if that guess is wrong.";
+  if (!host.confirmed) {
+    note.textContent = "Not confirmed yet. Match this computer, or pick the keyboard yourself.";
     note.className = "hint warn";
   } else {
     note.textContent = "Characters follow this keyboard.";
@@ -174,12 +168,40 @@ function showHost(host) {
   }
 }
 
+function detectOs() {
+  const ua = navigator.userAgent || "";
+  const platform = (navigator.userAgentData && navigator.userAgentData.platform) || navigator.platform || "";
+  const text = `${platform} ${ua}`.toLowerCase();
+  if (text.includes("win")) return "windows";
+  if (text.includes("mac")) return "macos";
+  return "linux";
+}
+
+async function detectLayout() {
+  if (!navigator.keyboard || !navigator.keyboard.getLayoutMap) return null;
+  const map = await navigator.keyboard.getLayoutMap();
+  const q = (map.get("KeyQ") || "").toLowerCase();
+  const z = (map.get("KeyZ") || "").toLowerCase();
+  if (q === "a") return "fr";
+  if (z === "y") return "de";
+  if (map.get("Backslash") === "#") return "uk";
+  return "us";
+}
+
 async function saveHost(layout, os) {
   say("Saving the computer layout...");
-  const res = await call("/api/host", { layout, os });
-  if (!res.ok) return say(res.error, "bad");
-  showHost(res.host);
-  say("The pad will type for that computer.", "good");
+  try {
+    if (layout === "auto") {
+      layout = await detectLayout();
+      os = detectOs();
+      if (!layout) throw new Error("This page could not read the keyboard. Choose US, UK, German or French.");
+    }
+    await HidPad.setHost(layout, os);
+    await refresh();
+    say("The pad will type for that computer.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 }
 
 function adoptSlots(slots) {
@@ -497,14 +519,17 @@ async function apply() {
     if (stored.has(id) && binding !== stored.get(id).binding) changes[id] = binding;
 
   say("Writing to the pad...");
-  const res = await call("/api/apply", { changes });
-  if (!res.ok) return say(res.error, "bad");
-  adoptSlots(res.slots);
-  editorFor = null;
-  drawPad();
-  showEditor();
-  updateApply();
-  say("Stored on the pad. Bindings are kept when it is unplugged.", "good");
+  try {
+    const slots = await HidPad.writeChanges(changes);
+    adoptSlots(slots);
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    say("Stored on the pad. Bindings are kept when it is unplugged.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 }
 
 function download() {
@@ -539,12 +564,6 @@ async function upload(file) {
   }
 }
 
-function say(text, cls = "") {
-  const s = el("status");
-  s.textContent = text;
-  s.className = `status ${cls}`;
-}
-
 el("binding").addEventListener("input", () => commitText(el("binding").value, { fromField: true }));
 el("function").onchange = onFunction;
 el("steps").onchange = onFunction;
@@ -572,21 +591,20 @@ window.addEventListener("keydown", async (e) => {
   capturing = false;
   el("capture").textContent = "Capture";
 
-  const res = await call("/api/capture", {
-    key: KEY_FROM_BROWSER[e.key] || e.key,
+  const binding = PadBind.captureBinding(KEY_FROM_BROWSER[e.key] || e.key, {
     shift: e.shiftKey,
     ctrl: e.ctrlKey,
     alt: e.altKey,
     meta: e.metaKey,
     altgr: e.getModifierState("AltGraph"),
   });
-  if (!res.ok) return say(res.error, "bad");
-  commitText(res.binding);
-  say(`Captured ${res.binding}.`, "good");
+  if (!binding) return say("The browser did not report a key this page can store. Type it, or pick it from the list.", "bad");
+  commitText(binding);
+  say(`Captured ${binding}.`, "good");
 });
 
 el("apply").onclick = apply;
-el("reload").onclick = refresh;
+el("reload").onclick = () => { connectOrRefresh().catch((err) => say(err.message, "bad")); };
 el("revert").onclick = () => {
   for (const [id, info] of stored) staged.set(id, info.binding);
   editorFor = null;
@@ -597,28 +615,61 @@ el("revert").onclick = () => {
 };
 el("defaults").onclick = async () => {
   if (!confirm("Replace every binding with the defaults?")) return;
-  const res = await call("/api/reset", {});
-  if (!res.ok) return say(res.error, "bad");
-  adoptSlots(res.slots);
-  editorFor = null;
-  drawPad();
-  showEditor();
-  updateApply();
-  say("Defaults restored.", "good");
+  try {
+    const slots = await HidPad.reset();
+    adoptSlots(slots);
+    editorFor = null;
+    drawPad();
+    showEditor();
+    updateApply();
+    say("Defaults restored.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 };
 el("boot").onclick = async () => {
   if (!confirm("Reboot the pad into its bootloader for reflashing?")) return;
-  const res = await call("/api/bootloader", {});
-  say(res.ok
-    ? "In the ROM bootloader for a few seconds. If chflash is not already waiting, run it and click again: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30 (full image, 13296 bytes)."
-    : res.error, res.ok ? "good" : "bad");
+  try {
+    await HidPad.bootloader();
+    el("device").textContent = "Not connected";
+    el("device").className = "device";
+    say("The pad is in the ROM bootloader for a few seconds. Run python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30 before clicking this if you still need the one-time install.", "good");
+  } catch (err) {
+    say(err.message, "bad");
+  }
 };
 el("save").onclick = download;
 el("load").onclick = () => el("file").click();
 el("file").onchange = (e) => { if (e.target.files[0]) upload(e.target.files[0]); };
 
+async function connectOrRefresh() {
+  if (!navigator.hid) {
+    throw new Error("This browser has no WebHID. Use Chrome or Edge.");
+  }
+  if (!HidPad.opened()) await HidPad.connect();
+  await refresh();
+}
+
+el("connect").onclick = () => {
+  connectOrRefresh().catch((err) => {
+    el("device").textContent = "Not connected";
+    el("device").className = "device bad";
+    say(err.message, "bad");
+  });
+};
+
 adoptSlots(blankSlots());
 selected = "1";
+options = PadBind.catalogue();
+buildPickers();
 drawPad();
 showEditor();
-refresh();
+if (!navigator.hid) {
+  el("device").textContent = "This browser has no WebHID. Use Chrome or Edge.";
+  el("device").className = "device bad";
+  el("connect").disabled = true;
+  say("WebHID is missing. Chrome or Edge is required.", "bad");
+} else {
+  el("device").textContent = "Not connected";
+  say("Click Connect pad. A pad that is not yet on firmware 1.2.0 still needs one chflash first.");
+}

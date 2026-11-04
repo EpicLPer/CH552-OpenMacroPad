@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
-"""Browser-based configurator for the SY181P2R03003A macropad.
-
-    python tools\\padweb.py
-
-Serves a small page on localhost and opens it. Nothing beyond hidapi is needed:
-the front end is plain HTML and JavaScript in tools/webui, which also makes it
-easy to modify without knowing a GUI toolkit.
-
-The server binds to the loopback interface only. It can rebind keys and reboot
-the device into its bootloader, so it has no business being reachable from the
-network.
+"""Optional local helper. The configurator is tools/webui/index.html and does
+not need this server. Chrome or Edge open that file and talk to the pad with
+WebHID. This module remains only for anyone still driving the old HTTP API.
 """
 
 from __future__ import annotations

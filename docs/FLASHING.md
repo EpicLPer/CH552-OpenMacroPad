@@ -7,8 +7,9 @@ HID channel used to change bindings, and the pad writes it itself.
 
 ## Updating a pad that already runs 1.2.0 or newer
 
-1. Open the configurator in Chrome or Edge (`python tools/padweb.py`).
-2. Under **Firmware**, connect the pad and choose `firmware/prebuilt/padfw-1.2.0.web.bin`.
+1. Open [`tools/webui/index.html`](../tools/webui/index.html) in Chrome or Edge
+   and click **Connect pad**.
+2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.0.web.bin`.
 3. Press **Update firmware** and leave the cable in until the pad reboots.
 
 No Zadig, no libusb, and no `chflash.py`. The `.web.bin` is the application
@@ -49,11 +50,11 @@ longer work with the pad.
 Python 3.8 or newer, plus:
 
 ```
-pip install pyusb libusb-package hidapi
+pip install pyusb libusb-package
 ```
 
-`pyusb` and `libusb-package` are for flashing, `hidapi` for configuring
-afterwards.
+`pyusb` and `libusb-package` are for the one-time `chflash.py` install. The
+configurator itself is the HTML file and does not use them.
 
 To build from source rather than use the prebuilt binary you also need
 [SDCC](https://sdcc.sourceforge.net/) on your `PATH`.

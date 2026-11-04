@@ -13,7 +13,8 @@
     <h1>Macropad</h1>
     <p class="tag">Twelve keys, two knobs. Click one, then say what it should do.</p>
   </div>
-  <div id="device" class="device">Connecting...</div>
+    <button id="connect" class="primary" type="button">Connect pad</button>
+    <div id="device" class="device">Not connected</div>
 </header>
 
 <div class="hostbar" id="hostbar" hidden>
@@ -71,9 +72,10 @@
 <details class="firmware">
   <summary>Firmware update</summary>
   <p class="hint">
-    Chrome and Edge update a pad that is already running 1.2.0. Firmware
-    1.0.0 and 1.1.0 have no updater command. Connect names that firmware and
-    the one-time chflash of <code>padfw-1.2.0.bin</code> (13296 bytes).
+    A pad that is not yet on firmware 1.2.0 cannot update itself. That first
+    install is still <code>python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30</code>
+    (13296 bytes). After that, choose <code>padfw-1.2.0.web.bin</code> here.
+    Firefox and Safari have no WebHID; use Chrome or Edge.
   </p>
   <div class="update-row">
     <button id="fwConnect" type="button">Connect pad</button>
@@ -98,6 +100,8 @@
 
 <div id="status" class="status"></div>
 
+<script src="bindings.js"></script>
+<script src="hidpad.js"></script>
 <script src="app.js"></script>
 <script src="update.js"></script>
 </body>

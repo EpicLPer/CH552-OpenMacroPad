@@ -12,8 +12,9 @@ which is noted explicitly below when it happens.
 Storage format is still 2. A pad running 1.1.0 keeps its bindings and its
 layout setting.
 
-- The configurator draws the twelve keys and two knobs. A binding is typed
-  or captured. Media, mouse, keypad and system keys stay in their own list.
+- The configurator is `tools/webui/index.html`. Chrome or Edge talk to the
+  pad with WebHID. No Python server. A pad that is not yet 1.2.0 still needs
+  one `chflash.py` of the full image.
 - On macOS the tools open the pad when hidapi only lists the keyboard
   usage page. The vendor collection is still report id 3 on that device.
   Allow Terminal under Input Monitoring if the pad does not appear at all.

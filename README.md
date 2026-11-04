@@ -78,16 +78,10 @@ and the knobs handle volume and media playback.
    updates are sent from the configurator in Chrome or Edge and do not need
    Zadig.
 
-2. **Configure it.**
-
-   ```
-   pip install hidapi
-   python tools/padweb.py
-   ```
-
-   That opens the configurator in your browser. See
-   [`docs/CONFIGURING.md`](docs/CONFIGURING.md) for the full binding reference
-   and the command line equivalent.
+2. **Configure it.** Open [`tools/webui/index.html`](tools/webui/index.html)
+   in Chrome or Edge and click **Connect pad**. No Python server and no
+   hidapi. Firefox and Safari cannot connect. See
+   [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
 Reflashing later needs no jumper or disassembly: the configurator has a button
 that reboots the pad into its bootloader.

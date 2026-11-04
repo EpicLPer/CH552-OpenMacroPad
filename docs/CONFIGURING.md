@@ -2,24 +2,15 @@
 
 Bindings live on the device, in the CH552's data flash. They survive unplugging
 and follow the pad to any computer. Changing one is a small write over USB, not
-a reflash, and needs no driver: the firmware exposes a vendor HID collection
-that the operating system hands to user space without complaint.
+a reflash. The configurator is a web page: open `tools/webui/index.html` in
+Chrome or Edge (double-click the file, or use File → Open). Click **Connect
+pad**. Nothing else has to be running. Firefox and Safari have no WebHID, so
+the page stops there.
 
-```
-pip install hidapi
-python tools/padweb.py
-```
-
-That serves the configurator on `127.0.0.1:8765` and opens it. Nothing is sent
-anywhere; the server binds to the loopback interface only, deliberately, since
-it can rebind keys and reboot the device.
-
-On a Mac the same command is used. macOS talks to the pad through IOHID
-(there is no hidraw). The configuration channel is the vendor collection,
-usage page `0xFF00`, usage 1, report id 3, on the same USB device as the
-keyboard (`1189:8890`). Allow **Terminal** under System Settings → Privacy &
-Security → Input Monitoring, then quit and reopen the terminal. The ROM
-bootloader (`4348:55e0`) is not this device.
+A pad that is not yet on firmware 1.2.0 cannot be updated from the page. That
+one-time install is still `python tools/chflash.py` with the full
+`firmware/prebuilt/padfw-1.2.0.bin`. After 1.2.0, later firmware updates are
+the `.web.bin` in the Firmware section of the same page.
 
 ## The configurator
 
@@ -56,7 +47,9 @@ pad already on 1.2.0.
 
 ## The command line
 
-Everything the configurator does is also available from `tools/padconf.py`:
+The page does not need Python. `tools/padconf.py` is an optional command-line
+tool for people who already use it. It still needs `hidapi`, and it is not
+how you open the configurator.
 
 ```
 python tools/padconf.py show                    # what the pad currently does
