@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Flash a binary to a CH55x through the WCH ISP bootloader.
 
-    python tools/chflash.py firmware/prebuilt/padfw-1.0.0.bin --wait 30
+    python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30
 
-The device must be in the bootloader. Either run `python tools/padconf.py
-bootloader`, or hold the top-left key while plugging the cable in, or bridge the
-J2 pads while plugging in.
+The device must be in the bootloader. Hold the top-left key while plugging the
+cable in, or bridge the J2 pads while plugging in. Start this command first
+and use `--wait`, because the bootloader only stays up for a few seconds.
 
 Protocol implementation follows wagiminator's chprog.py (MIT), which in turn
 derives from Aaron Christophel's chflasher and juliuswwj's wchprog. Two things

@@ -1,6 +1,4 @@
-# Configuring the pad (padweb.py, padconf.py, padselftest.py)
-hidapi>=0.14
-
-# Flashing over the WCH ISP bootloader (chflash.py)
+# One-time flash of a pad that is not yet on firmware 1.2.0 (tools/chflash.py).
+# The configurator is tools/webui/index.html and does not use these packages.
 pyusb>=1.2
 libusb-package>=1.0

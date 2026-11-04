@@ -633,7 +633,7 @@ el("boot").onclick = async () => {
     await HidPad.bootloader();
     el("device").textContent = "Not connected";
     el("device").className = "device";
-    say("The pad is in the ROM bootloader for a few seconds. Run python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30 before clicking this if you still need the one-time install.", "good");
+    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30. A pad already on 1.2.0 updates from the Firmware section with padfw-1.2.0.web.bin.", "good");
   } catch (err) {
     say(err.message, "bad");
   }

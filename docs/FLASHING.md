@@ -1,170 +1,95 @@
 # Flashing
 
-The CH552 has a bootloader in ROM that cannot be erased. A bad flash is
-recoverable. From firmware 1.2.0 onward the normal update does not use that
-bootloader at all: the configurator sends the new image over the same vendor
-HID channel used to change bindings, and the pad writes it itself.
+Flash once, then configure in the browser. The configurator is
+[`tools/webui/index.html`](../tools/webui/index.html). Open it in Chrome or
+Edge and click **Connect pad**.
 
-## Updating a pad that already runs 1.2.0 or newer
+The CH552 bootloader is in ROM and cannot be erased. A bad flash is recoverable.
 
-1. Open [`tools/webui/index.html`](../tools/webui/index.html) in Chrome or Edge
-   and click **Connect pad**.
-2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.0.web.bin`.
+## Already on 1.2.0
+
+1. Open the page and click **Connect pad**.
+2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.0.web.bin`
+   (8143 bytes).
 3. Press **Update firmware** and leave the cable in until the pad reboots.
 
-No Zadig, no libusb, and no `chflash.py`. The `.web.bin` is the application
-only. The USB stack that receives it lives above that image and is not
-rewritten. Bindings in data flash are kept.
+Bindings are kept. The `.web.bin` is the application only. The USB code that
+receives it is not inside that file. This image is the one that types `@`
+with the macOS key for the selected layout, so a pad flashed from an earlier
+1.2.0 file should take this update.
 
-If the transfer stops after it has started erasing, unplug and replug. The
-pad comes back as a keyboard that only accepts another update (hold the
-top-left key while plugging in if you would rather reach the ROM bootloader
-instead). Send the `.web.bin` again. The reset page is replaced last, so a
-failed transfer still has the key-1 path.
+If the transfer stops, unplug and replug, then send the `.web.bin` again.
+The reset page is written last, so the top-left key still enters the ROM
+bootloader. The one case that needs the full image again is a power loss
+while that page is being copied. The pad then shows up as `4348:55E0`.
+Flash `padfw-1.2.0.bin` with the steps below, not the `.web.bin`.
 
-The one case that does need `chflash` again is a power loss in the few
-milliseconds while that reset page is being copied. The pad then enumerates
-as the WCH bootloader (`4348:55E0`) instead of a keyboard. Use the recovery
-steps below with the **full** `padfw-1.2.0.bin`, not the `.web.bin`.
+## First install, or a pad still on 1.0.0 or 1.1.0
 
-## First install, and the one-time step from 1.0.0 or 1.1.0
+Those builds cannot write their own program flash. The page will say so.
+Flash the full `firmware/prebuilt/padfw-1.2.0.bin` (13296 bytes) once.
 
-Firmware 1.0.0 and 1.1.0 can reboot into the ROM bootloader, but they cannot
-write their own program flash. The first jump to 1.2.0 is still `chflash.py`
-of the full `firmware/prebuilt/padfw-1.2.0.bin` (13296 bytes). Every later
-update can be the browser path above.
+The stock firmware cannot be backed up. This replaces it, and the stock
+configuration tool will no longer talk to the pad.
 
-On those older builds the configurator still connects. The updater command
-is not implemented, so the pad answers with an empty reply. The Firmware
-section names the version and this full image. The `.web.bin` is not sent.
-
-Be aware of one thing before starting: **the stock firmware cannot be backed
-up.** The bootloader has no read command, and the verify command cannot be
-abused as a substitute (it answers only once per session and does not
-distinguish a match from a mismatch usefully). Flashing this firmware over
-the stock image is a one-way trip. The stock configuration tool will no
-longer work with the pad.
-
-## 1. Install the prerequisites
-
-Python 3.8 or newer, plus:
+Python 3.8 or newer:
 
 ```
 pip install pyusb libusb-package
 ```
 
-`pyusb` and `libusb-package` are for the one-time `chflash.py` install. The
-configurator itself is the HTML file and does not use them.
+That install is only for this flash. The HTML page does not use it.
 
-To build from source rather than use the prebuilt binary you also need
-[SDCC](https://sdcc.sourceforge.net/) on your `PATH`.
+**Windows, once.** The bootloader has no driver. Unplug the pad, hold the
+top-left key, plug in, and keep the key held. In
+[Zadig](https://zadig.akeo.ie/) choose **Options → List All Devices**, select
+USB ID **`4348:55E0`**, pick **libusb-win32** (not WinUSB) and install the
+driver. If Device Manager shows error code 10 afterwards, unplug and replug.
 
-## 2. Install the bootloader driver (Windows)
-
-Windows has no driver for the CH552 bootloader, so one has to be assigned with
-[Zadig](https://zadig.akeo.ie/). This is needed once.
-
-The catch is that the bootloader is only present while the chip is in bootloader
-mode, so it has to be showing before Zadig can see it.
-
-1. Unplug the pad.
-2. Hold the **top-left key** and plug the cable in, keeping it held. See
-   section 3 if that does not work.
-3. Start Zadig within a few seconds, choose **Options &rarr; List All Devices**,
-   and select the entry with USB ID **`4348:55E0`**.
-4. Choose **libusb-win32** in the driver box on the right and click
-   **Replace Driver** or **Install Driver**.
-
-Pick `libusb-win32`, not WinUSB. Both appear to work at first, but WinUSB times
-out on the actual transfers with this bootloader.
-
-If the device afterwards shows in Device Manager with a warning triangle and
-error code 10, unplug and replug it. Windows sometimes keeps a stale device node
-after a driver swap.
-
-On Linux no driver is needed, just a udev rule granting access:
+**Linux.** No driver. A udev rule is enough:
 
 ```
 echo 'SUBSYSTEM=="usb", ATTR{idVendor}=="4348", ATTR{idProduct}=="55e0", MODE="666"' | sudo tee /etc/udev/rules.d/99-ch55x.rules
 sudo service udev restart
 ```
 
-## 3. Enter the bootloader
-
-Three ways, in order of convenience:
-
-**From software**, once this firmware is already installed:
-
-```
-python tools/padconf.py bootloader
-```
-
-This is the normal route for updates and needs no physical access at all.
-
-**Hold the top-left key while plugging in.** Also only works once this firmware
-is installed.
-
-**Bridge the J2 pads while plugging in.** The fallback that always works,
-including on a pad still running stock firmware or one whose firmware is too
-broken to respond. J2 is the two-pad header next to the CH552G; short them with
-tweezers or a paperclip as the cable goes in, then release.
-
-In every case the bootloader stays available for only a few seconds before
-handing over to the firmware, which is why the flashing command below takes a
-`--wait` option: start it first, then trigger the bootloader.
-
-## 4. Flash
+Enter the bootloader, then flash. The bootloader is only present for a few
+seconds, so start the command first:
 
 ```
 python tools/chflash.py firmware/prebuilt/padfw-1.2.0.bin --wait 30
 ```
 
-Run that, then trigger the bootloader by whichever method above. Expected
-output:
+Then hold the **top-left key** while plugging the cable in. On stock firmware,
+or if the key does nothing, bridge the **J2** pads next to the CH552 while
+plugging in, then release. Expected output ends with the chip id, bootloader
+version, the 13296-byte image, and `Done`.
 
-```
-Waiting up to 30s for the bootloader. Plug the cable in now ...
-Connected via the libusb-win32 backend.
-Chip 0x52, bootloader v2.40
-Flashing padfw-1.2.0.bin (the full recovery image)
-Done. The pad restarts on the new firmware.
-```
+The pad restarts as a keyboard. Open `tools/webui/index.html` in Chrome or
+Edge, click **Connect pad**, set the layout and OS, and edit the keys.
 
-The pad restarts as a keyboard a moment later. Existing bindings survive an
-update: the keymap lives in data flash, which the firmware erase does not touch.
+## Building from source
 
-## 5. Building from source
+[SDCC](https://sdcc.sourceforge.net/) on `PATH`, then:
 
 ```
 cd firmware
 python build.py padfw.c
-python build.py padfw.c --flash
 ```
 
-`build.py` replaces the upstream makefile so that no `make`, `objcopy` or `awk`
-is needed on Windows. It also works around an SDCC packaging quirk: on Windows
-the `cc1` executable ships without a `.exe` extension, which stops
-`CreateProcess` from finding it, so the build copies it into a private shim
-directory rather than modifying the SDCC installation.
+`discovery.c` builds the same way. It maps unknown hardware and is described
+in [`HARDWARE.md`](HARDWARE.md).
 
-`discovery.c` builds the same way. That one is for mapping unknown hardware and
-is described in [`HARDWARE.md`](HARDWARE.md).
+## If the flash does not stick
 
-## Troubleshooting
+**`no CH55x bootloader found`** — start `chflash.py --wait` before triggering
+the bootloader.
 
-**`no CH55x bootloader found`** &mdash; the device was not in bootloader mode
-when the tool looked. Use `--wait` and trigger the bootloader afterwards.
+**Timeouts during transfer** — WinUSB instead of libusb-win32. Redo the Zadig
+step.
 
-**Timeouts or pipe errors during transfer** &mdash; almost always the WinUSB
-driver instead of libusb-win32. Redo step 2.
-
-**The bootloader stops responding after repeated attempts** &mdash; it can wedge
-if hammered. Unplug and replug to reset it.
-
-**Flashing succeeds but the pad does nothing, or Windows reports an
-unrecognized device** &mdash; the bootloader handed off and the firmware did
-not finish enumerating. Hold the top-left key, or bridge J2, while plugging
-in and flash the full `padfw-1.2.0.bin` again (not the `.web.bin`). The ROM
-bootloader is intact regardless of what is in code flash. `padfw-1.1.0.bin`
-is a complete keyboard image without the browser updater, if you want that
-before retrying 1.2.0.
+**The pad is an unrecognized device, or it stays a bootloader** — hold the
+top-left key, or bridge J2, and flash the full `padfw-1.2.0.bin` again.
+Do not send the `.web.bin` to the ROM bootloader. `padfw-1.1.0.bin` is a
+complete keyboard image without the browser updater, if you want that before
+retrying 1.2.0.

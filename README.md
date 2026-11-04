@@ -71,20 +71,16 @@ and the knobs handle volume and media playback.
 
 ## Getting started
 
-1. **Flash the firmware.** The first install, and the one-time step up from
-   firmware 1.0.0 or 1.1.0, uses a prebuilt image in
-   [`firmware/prebuilt/`](firmware/prebuilt). Follow
-   [`docs/FLASHING.md`](docs/FLASHING.md). After 1.2.0 is on the pad, later
-   updates are sent from the configurator in Chrome or Edge and do not need
-   Zadig.
-
-2. **Configure it.** Open [`tools/webui/index.html`](tools/webui/index.html)
-   in Chrome or Edge and click **Connect pad**. No Python server and no
-   hidapi. Firefox and Safari cannot connect. See
+1. **Flash once**, if the pad is not already on 1.2.0. That is
+   `firmware/prebuilt/padfw-1.2.0.bin` (13296 bytes) through
+   [`docs/FLASHING.md`](docs/FLASHING.md). Python is only for that flash.
+2. **Open** [`tools/webui/index.html`](tools/webui/index.html) in Chrome or
+   Edge, click **Connect pad**, set the layout and OS, and edit the keys.
+   Firefox and Safari cannot connect. See
    [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
-Reflashing later needs no jumper or disassembly: the configurator has a button
-that reboots the pad into its bootloader.
+A pad already on 1.2.0 takes later firmware from the Firmware section of that
+same page (`padfw-1.2.0.web.bin`).
 
 ![The browser configurator](docs/img/webgui.png)
 
@@ -101,16 +97,17 @@ that reboots the pad into its bootloader.
 ## Known limitations
 
 - Characters and letter shortcuts follow the host layout stored on the pad
-  (US, UK, German or French). Set it once per computer with the configurator
-  or `python tools/padconf.py layout auto`. Layouts outside those four, and
-  characters a layout has no key for on macOS, are not translated. See
+  (US, UK, German or French) and the OS set next to it. Set both on the
+  page, once per computer. Layouts outside those four, and characters a
+  layout has no key for on macOS, are not translated. See
   [`docs/CONFIGURING.md`](docs/CONFIGURING.md#host-keyboard-layout).
 - Bindings are single actions. There are no multi-keystroke macros, no text
   strings and no layers.
 - One action per slot, so a key cannot behave differently on a long press.
 - The knobs have no acceleration; one detent is always one action.
-- Tested on Windows only, though nothing in the tools is Windows-specific apart
-  from the driver setup for flashing.
+- The configurator is Chrome or Edge. The one-time flash on Windows needs the
+  Zadig driver in [`docs/FLASHING.md`](docs/FLASHING.md). Linux needs the udev
+  rule there.
 
 ## Licence
 

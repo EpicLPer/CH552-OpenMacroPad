@@ -40,35 +40,14 @@ pad already on 1.2.0.
 | --- | --- |
 | Apply | Writes the changed slots. They persist across unplugging. |
 | Discard | Throws away edits, back to what the pad holds. |
-| Reload | Re-reads the device, useful if you changed it elsewhere. |
+| Reload | Re-reads the device. |
 | Save / Load profile | JSON files, for backups and for sharing layouts. |
 | Defaults | F13&ndash;F24 on the keys, volume and media on the knobs. |
 | Bootloader | Recovery path. Normal updates use the Firmware section instead. |
 
-## The command line
-
-The page does not need Python. `tools/padconf.py` is an optional command-line
-tool for people who already use it. It still needs `hidapi`, and it is not
-how you open the configurator.
-
-```
-python tools/padconf.py show                    # what the pad currently does
-python tools/padconf.py bindings                # everything that has a name
-python tools/padconf.py set 1 F13
-python tools/padconf.py set 2 win+e
-python tools/padconf.py set 3 ctrl+shift+esc
-python tools/padconf.py set 4 MOUSE_BACK
-python tools/padconf.py set top-cw VOL_UP
-python tools/padconf.py set bot-cw SCROLL_DOWN:3
-python tools/padconf.py set 12 none
-python tools/padconf.py save myprofile.json
-python tools/padconf.py load myprofile.json
-python tools/padconf.py reset
-python tools/padconf.py bootloader
-```
-
-Slot names are `1` to `12` for the keys, and `top-press`, `top-cw`, `top-ccw`,
-`bot-press`, `bot-cw`, `bot-ccw` for the knobs, where `cw` is clockwise.
+Slot names in a profile are `1` to `12` for the keys, and `top-press`,
+`top-cw`, `top-ccw`, `bot-press`, `bot-cw`, `bot-ccw` for the knobs, where
+`cw` is clockwise.
 
 ## What can be bound
 
@@ -111,18 +90,10 @@ macOS is Option+à, the same key Windows uses.
 swapped the same way. Named keys such as Enter, the arrows and F13 are
 positions and do not change.
 
-The layouts are US, UK, German and French. Set the one this computer uses:
-
-```
-python tools/padconf.py layout          # what the pad is set to
-python tools/padconf.py layout auto     # match this computer
-python tools/padconf.py layout de
-python tools/padconf.py layout fr linux
-```
-
-The configurator has the same control at the top of the page. The setting
-survives unplugging. It is not part of a profile: a shared profile should type
-`@` on both computers, and each computer keeps its own layout setting.
+The layouts are US, UK, German and French, and the OS is Windows, Linux or
+macOS. Both are set at the top of the page and survive unplugging. They are
+not part of a profile: a shared profile should type `@` on both computers,
+and each computer keeps its own layout and OS.
 
 Characters that the selected layout has no key for are typed with an
 operating-system sequence. Windows uses Alt and the numeric keypad (CP1252, so
@@ -171,21 +142,10 @@ corrupt or hostile file cannot push bad values at the device.
 
 ## If something goes wrong
 
-`python tools/padconf.py reset` restores the defaults.
+**Defaults** on the page restores F13–F24 and the media knobs.
 
 If the pad itself is confused, unplug and replug it. The stored keymap carries a
 checksum which is verified at every boot, along with a range check on every
 individual binding, and anything that fails is discarded and rebuilt from the
 defaults. A write interrupted by an unplug therefore heals itself rather than
 leaving the pad in a strange state.
-
-To confirm that machinery actually works rather than taking it on trust:
-
-```
-python tools/padselftest.py
-```
-
-That fires deliberately malformed requests at the device, bypassing the
-host-side checks, and confirms each is refused. It finishes by damaging the
-stored checksum on purpose, so replug the pad afterwards and watch it come back
-on defaults.

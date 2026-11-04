@@ -1,11 +1,9 @@
-"""Shared logic for talking to the macropad.
+"""Binding codec for the macropad.
 
-Both the command line tool and the GUI build on this, so the binding tables and
-the wire format only exist in one place.
-
-A printable binding is the character the user wants, not a key position. The
-firmware turns it into the right HID usage for the layout stored on the pad
-(see layouts.py). Named keys and RAW usages are positions and are not
+The configurator is tools/webui/index.html. This module is the Python copy of
+the binding strings that page uses, so the tests can check the two agree.
+The firmware turns a character into the HID usage for the layout stored on
+the pad (see layouts.py). Named keys and RAW usages are positions and are not
 translated. Codes below 128 are ASCII characters; codes at or above 0x8000 are
 a Unicode scalar in the low 15 bits; codes from 136 up are HID usages.
 """
@@ -13,19 +11,10 @@ a Unicode scalar in the low 15 bits; codes from 136 up are HID usages.
 from __future__ import annotations
 
 import json
-import sys
 from dataclasses import dataclass
 
 import layouts
 
-
-def _hid():
-    """hidapi is only needed when a pad is actually opened."""
-    try:
-        import hid
-    except ImportError as exc:                              # pragma: no cover
-        raise PadError("hidapi is not installed.  pip install hidapi") from exc
-    return hid
 
 VID, PID = 0x1189, 0x8890
 USAGE_PAGE = 0xFF00
@@ -396,214 +385,8 @@ def binding_catalogue() -> dict[str, list[str]]:
     }
 
 
-# ===================================================================================
-# Device
-# ===================================================================================
-
 class PadError(Exception):
     pass
-
-
-@dataclass
-class Info:
-    format: int         # storage format version
-    count: int          # number of bindable slots
-    flash: int          # bytes of data flash
-    firmware: str       # firmware version, as major.minor.patch
-    host: int = 0       # layout/OS profile byte; 0 on firmware before 1.1.0
-
-    @property
-    def layout(self) -> str:
-        return layouts.unpack_profile(self.host)[0]
-
-    @property
-    def os(self) -> str:
-        return layouts.unpack_profile(self.host)[1]
-
-    @property
-    def host_confirmed(self) -> bool:
-        return layouts.unpack_profile(self.host)[2]
-
-    @property
-    def supports_host(self) -> bool:
-        return layouts.firmware_supports_host(self.firmware)
-
-
-def _field(info: dict, key: str) -> int | None:
-    value = info.get(key)
-    if value is None:
-        return None
-    # A signed 16-bit read turns the vendor page 0xFF00 into -256.
-    return int(value) & 0xFFFF
-
-
-def config_candidates(devices: list[dict], platform: str | None = None) -> list[dict]:
-    """Paths worth opening for the vendor configuration collection.
-
-    The collection is usage page 0xFF00, usage 1, report id 3. Windows and
-    Linux list that collection as its own HID device. macOS uses one IOHID
-    device for every top-level collection on the interface and, unless hidapi
-    is new enough to duplicate the usage pairs, only the keyboard page
-    (0x0001) shows up. Report id 3 still selects the vendor output on that
-    device. hidraw does not exist on macOS.
-    """
-    platform = sys.platform if platform is None else platform
-    vendor = [d for d in devices if _field(d, "usage_page") == USAGE_PAGE]
-    vendor.sort(key=lambda d: 0 if _field(d, "usage") == 1 else 1)
-    if vendor:
-        return vendor
-    if platform == "darwin" and devices:
-        return list(devices)
-    return []
-
-
-def _pad_missing_message(devices: list[dict]) -> str:
-    if not devices:
-        return (
-            "No HID device with id 1189:8890 was found.\n"
-            "The pad has to be running its keyboard firmware. The ROM bootloader "
-            "is a different device, 4348:55e0, and these tools cannot configure it.\n"
-            "On a Mac, allow the Terminal app under System Settings → Privacy & "
-            "Security → Input Monitoring, then quit and reopen the terminal. "
-            "If macOS asked to allow a USB accessory, allow it. See what hidapi "
-            "can see with:\n"
-            "  python -c \"import hid; print([(hex(d['vendor_id']), hex(d['product_id']), "
-            "hex(d.get('usage_page') or 0)) for d in hid.enumerate() if d['vendor_id']==0x1189])\""
-        )
-    pages = ", ".join(
-        f"0x{page:04X}" if (page := _field(d, "usage_page")) is not None else "?"
-        for d in devices
-    )
-    return (
-        "Macropad config interface not found.\n"
-        "The pad is connected, but none of its HID collections is usage page "
-        f"0xFF00 (saw {pages})."
-    )
-
-
-class Pad:
-    def __init__(self) -> None:
-        hid = _hid()
-        devices = list(hid.enumerate(VID, PID))
-        candidates = config_candidates(devices)
-        if not candidates:
-            raise PadError(_pad_missing_message(devices))
-        last_error = ""
-        opened = False
-        seen: set[bytes | str] = set()
-        for info in candidates:
-            path = info.get("path")
-            if not path or path in seen:
-                continue
-            seen.add(path)
-            dev = hid.device()
-            try:
-                dev.open_path(path)
-            except OSError as exc:
-                last_error = str(exc)
-                continue
-            self.dev = dev
-            self.dev.set_nonblocking(False)
-            opened = True
-            break
-        if not opened:
-            extra = f"\nhidapi said: {last_error}" if last_error else ""
-            raise PadError(
-                "The pad is visible to hidapi, but opening it failed."
-                + extra
-                + "\nOn a Mac, allow Terminal under System Settings → Privacy & "
-                "Security → Input Monitoring, then quit and reopen the terminal."
-            )
-
-    def close(self) -> None:
-        self.dev.close()
-
-    def __enter__(self) -> "Pad":
-        return self
-
-    def __exit__(self, *_) -> None:
-        self.close()
-
-    def request(self, cmd: int, *data: int) -> list[int]:
-        packet = [REPORT_ID, cmd, *data]
-        packet += [0] * (REPORT_LEN - len(packet))
-        self.dev.write(bytes(packet))
-        # Input reports for the keyboard collection share this endpoint, so
-        # skip anything that is not the answer we asked for.
-        for _ in range(10):
-            reply = self.dev.read(REPORT_LEN, timeout_ms=500)
-            if reply and reply[0] == REPORT_ID and reply[1] == cmd:
-                return reply
-        raise PadError(f"No reply to command 0x{cmd:02X}")
-
-    @staticmethod
-    def _check(reply: list[int]) -> None:
-        status = reply[7]
-        if status != ST_OK:
-            raise PadError(STATUS_TEXT.get(status, f"device error {status}"))
-
-    def info(self) -> "Info":
-        r = self.request(CMD_GET_INFO)
-        if bytes(r[2:4]) != b"PD":
-            raise PadError("Unexpected device signature")
-        version, count, size = r[4], r[5], r[6]
-        if version != FORMAT_VERSION:
-            raise PadError(
-                f"Device speaks config format v{version}, these tools expect "
-                f"v{FORMAT_VERSION}. Reflash the firmware or update the tools."
-            )
-        firmware = f"{r[8]}.{r[9]}.{r[10]}"
-        host = r[11] if layouts.firmware_supports_host(firmware) else 0
-        return Info(version, count, size, firmware, host)
-
-    def get(self, idx: int) -> Action:
-        r = self.request(CMD_GET_ACTION, idx)
-        self._check(r)
-        return Action(r[3], r[4], r[5] | (r[6] << 8))
-
-    def set(self, idx: int, action: Action) -> None:
-        self._check(self.request(CMD_SET_ACTION, idx, action.type, action.mod,
-                                 action.code & 0xFF, action.code >> 8))
-
-    def read_all(self) -> list[Action]:
-        return [self.get(i) for i in range(len(SLOTS))]
-
-    def write_all(self, actions: list[Action]) -> None:
-        # Skip slots that already match. Each set rewrites the checksum byte,
-        # so loading an unchanged profile used to burn a flash cycle per slot.
-        current = self.read_all()
-        for i, action in enumerate(actions):
-            if current[i] != action:
-                self.set(i, action)
-
-    def set_host(self, layout: str, os_name: str) -> int:
-        info = self.info()
-        if not info.supports_host:
-            raise PadError(
-                f"Firmware {info.firmware} cannot store a host layout. "
-                "Reflash firmware 1.1.0 or newer."
-            )
-        byte = layouts.pack_profile(layout, os_name, confirmed=True)
-        reply = self.request(CMD_SET_HOST, byte)
-        self._check(reply)
-        return reply[2]
-
-    def reset(self) -> None:
-        self._check(self.request(CMD_RESET))
-
-    def corrupt(self) -> None:
-        self._check(self.request(CMD_CORRUPT))
-
-    def bootloader(self) -> None:
-        # The device vanishes as it reboots, so there is no reply to wait for.
-        packet = [REPORT_ID, CMD_BOOTLOADER] + [0] * (REPORT_LEN - 2)
-        self.dev.write(bytes(packet))
-
-    def dump(self) -> bytes:
-        out = bytearray()
-        while len(out) < 128:
-            out += bytes(self.request(CMD_DUMP, len(out))[3:15])
-        return bytes(out[:128])
 
 
 # ===================================================================================

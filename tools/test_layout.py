@@ -240,20 +240,6 @@ def test_firmware_planner_matches() -> None:
             check(failures_local, got, (want.kind, want.mods, want.hid, want.aux))
 
 
-def test_config_candidates() -> None:
-    from padlib import USAGE_PAGE, config_candidates
-    vendor = {"path": b"vendor", "usage_page": USAGE_PAGE, "usage": 1}
-    other = {"path": b"other", "usage_page": USAGE_PAGE, "usage": 2}
-    keyboard = {"path": b"kbd", "usage_page": 0x0001, "usage": 0x06}
-    signed = {"path": b"signed", "usage_page": -256, "usage": 1}
-    check("vendor page wins", [d["path"] for d in config_candidates([keyboard, other, vendor], "win32")],
-          [b"vendor", b"other"])
-    check("signed vendor page", config_candidates([signed], "linux")[0]["path"], b"signed")
-    check("mac opens the keyboard device", config_candidates([keyboard], "darwin")[0]["path"], b"kbd")
-    check("linux does not", config_candidates([keyboard], "linux"), [])
-    check("nothing listed", config_candidates([], "darwin"), [])
-
-
 def test_action_equality_used_by_profiles() -> None:
     # write_all skips unchanged slots by comparing Action values.
     check("equal actions", Action(1, 2, 3), Action(1, 2, 3))
@@ -267,7 +253,6 @@ def main() -> int:
     test_profile_byte()
     test_generated_tables_are_current()
     test_firmware_planner_matches()
-    test_config_candidates()
     test_action_equality_used_by_profiles()
     if failures:
         print(f"\n{failures} check(s) failed")

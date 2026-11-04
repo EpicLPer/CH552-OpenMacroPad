@@ -139,19 +139,10 @@ inheriting junk. Rejections come back as a status code the host reports.
 Stored data gets the same treatment on boot. The header, the CRC-8 and every
 individual action are checked, and any failure discards the lot and rewrites the
 defaults. A plain sum would have done for detecting bit rot, but the realistic
-failure is a write cut short by an unplug, which leaves a partly updated block;
+failure is a write cut short by an unplug, which leaves a partly updated block.
 CRC-8 catches that. Writes order the payload before the header for the same
 reason, so an interrupted save leaves the magic invalid and the next boot
 rebuilds cleanly rather than running half a keymap.
-
-```
-python ../tools/padselftest.py
-```
-
-That drives deliberately malformed requests straight at the device, bypassing
-the host-side checks, and confirms each one is refused. It also damages the
-stored checksum on purpose so the recovery path can be exercised rather than
-merely assumed: replug the pad afterwards and it will come back on defaults.
 
 ## Two traps in the data-flash driver
 

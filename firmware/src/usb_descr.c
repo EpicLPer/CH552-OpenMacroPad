@@ -174,10 +174,10 @@ __code uint8_t ReportDescr[] ={
     0xc0,                          //   END_COLLECTION
     0xc0,                          // END_COLLECTION
 
-    // Vendor collection used to read and write the keymap. A separate top-level
-    // collection is what makes this reachable from user space on Windows:
-    // keyboard collections are claimed exclusively by the OS, but a vendor one
-    // gets its own device interface path that hidapi can open without a driver.
+    // Vendor collection used to read and write the keymap, and to receive a
+    // firmware update. A separate top-level collection is what makes this
+    // reachable from Chrome or Edge: keyboard collections are claimed by the
+    // OS, and WebHID is handed the vendor page (0xFF00, report id 3).
     // The stock firmware exposed its config channel the same way.
     0x06, 0x00, 0xff,              // USAGE_PAGE (Vendor Defined 0xFF00)
     0x09, 0x01,                    // USAGE (1)

@@ -1,7 +1,7 @@
 # Changelog
 
-Firmware versions are reported by `python tools/padconf.py show` and shown in
-the configurator, so you can always tell what a pad is running.
+Firmware versions are shown at the top of the configurator
+(`tools/webui/index.html`).
 
 The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
@@ -19,9 +19,9 @@ layout setting.
   `«`). UK is Shift+2. US stays Shift+2 and French stays Option+à. Update
   with the rebuilt `padfw-1.2.0.web.bin` (8143 bytes). The full image is
   still 13296 bytes.
-- On macOS the tools open the pad when hidapi only lists the keyboard
-  usage page. The vendor collection is still report id 3 on that device.
-  Allow Terminal under Input Monitoring if the pad does not appear at all.
+- The Python configurator is gone (`padweb.py`, `padconf.py`, `padgui.py`,
+  `padselftest.py`). Open `tools/webui/index.html`. Python is only
+  `chflash.py` for a pad that is not yet 1.2.0.
 - `nonus_backslash` is HID usage 0x64, the ISO key. German and French type
   `<` on that key. The character `<` is still its own binding, which is
   Shift+comma on US and UK.
@@ -98,8 +98,9 @@ Replaces the stock firmware entirely, on a board silkscreened `SY181P2R03003A
 - Stored configuration is protected by a CRC-8 and per-field range checks,
   verified at every boot. Anything that fails validation is discarded and the
   defaults are rewritten, so an interrupted write cannot leave the pad broken.
-- Browser-based configurator (`tools/padweb.py`), a command line equivalent
-  (`tools/padconf.py`), and JSON profiles for backup and sharing.
+- JSON profiles for backup and sharing. 1.0.0 also shipped a Python server
+  and a command-line configurator. Those are gone; the page is
+  `tools/webui/index.html`.
 - The pad can be rebooted into its bootloader from software, so updating the
   firmware needs neither the J2 jumper nor disassembly.
 
