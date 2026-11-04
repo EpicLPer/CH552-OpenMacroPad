@@ -14,6 +14,13 @@ That serves the configurator on `127.0.0.1:8765` and opens it. Nothing is sent
 anywhere; the server binds to the loopback interface only, deliberately, since
 it can rebind keys and reboot the device.
 
+On a Mac the same command is used. macOS talks to the pad through IOHID
+(there is no hidraw). The configuration channel is the vendor collection,
+usage page `0xFF00`, usage 1, report id 3, on the same USB device as the
+keyboard (`1189:8890`). Allow **Terminal** under System Settings → Privacy &
+Security → Input Monitoring, then quit and reopen the terminal. The ROM
+bootloader (`4348:55e0`) is not this device.
+
 ## The configurator
 
 The page draws the pad: twelve keys in three rows of four, and the two knobs

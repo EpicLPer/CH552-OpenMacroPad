@@ -14,6 +14,9 @@ layout setting.
 
 - The configurator draws the twelve keys and two knobs. A binding is typed
   or captured. Media, mouse, keypad and system keys stay in their own list.
+- On macOS the tools open the pad when hidapi only lists the keyboard
+  usage page. The vendor collection is still report id 3 on that device.
+  Allow Terminal under Input Monitoring if the pad does not appear at all.
 - `nonus_backslash` is HID usage 0x64, the ISO key. German and French type
   `<` on that key. The character `<` is still its own binding, which is
   Shift+comma on US and UK.
