@@ -43,6 +43,14 @@ header, .hostbar, footer {
 header { padding: 0; }
 .grow { flex: 1; }
 h1 { font-size: 22px; margin: 0; font-weight: 650; letter-spacing: -0.02em; }
+a.repo {
+  display: flex;
+  align-items: center;
+  margin-left: -4px;
+  color: var(--ink);
+  text-decoration: none;
+}
+a.repo:hover { color: var(--accent); }
 .ver {
   font: 600 13px/1 ui-monospace, "Cascadia Mono", monospace;
   color: var(--dim);
