@@ -14,7 +14,7 @@
     <p class="tag">Twelve keys, two knobs. Click one, then say what it should do.</p>
     <!-- Page version. Bump this when the HTML file itself changes.
          It is not the firmware version the pad reports after Connect. -->
-    <p class="pagever">Page 2 <span>— the file you opened, not the firmware on the pad</span></p>
+    <p class="pagever">Page 3 <span>— the file you opened, not the firmware on the pad</span></p>
   </div>
     <button id="connect" class="primary" type="button">Connect pad</button>
     <div id="device" class="device">Not connected</div>
@@ -75,9 +75,13 @@
 <details class="firmware">
   <summary>Firmware update</summary>
   <p class="hint">
-    A pad that is not yet on firmware 1.2.0 cannot update itself. That first
-    install is still <code>python tools/chflash.py firmware/prebuilt/padfw-1.2.1.bin --wait 30</code>
-    (13296 bytes). After that, choose <code>padfw-1.2.1.web.bin</code> here.
+    A pad on firmware 1.2.0 cannot update itself from this page. Its writer
+    rejects the flash command and then stops answering until the cable is
+    unplugged. The one-time install is
+    <code>python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30</code>
+    (13376 bytes): start that, then hold the top-left key or bridge J2 while
+    plugging in. Once the pad reports 1.2.2, later updates are
+    <code>padfw-1.2.2.web.bin</code> here.
     Firefox and Safari have no WebHID; use Chrome or Edge.
   </p>
   <div class="update-row">
@@ -86,7 +90,7 @@
     <button id="fwGo" class="primary" type="button" disabled>Update firmware</button>
   </div>
   <progress id="fwProgress" max="1" value="0"></progress>
-  <p id="fwNote" class="hint">The header must say Page 2. Then choose <code>padfw-1.2.1.web.bin</code> (7896 bytes). The pad's own line changes from firmware 1.2.0 to 1.2.1 only after that update.</p>
+  <p id="fwNote" class="hint">The header must say Page 3. A pad that says firmware 1.2.0 needs the full chflash above, not Update firmware.</p>
 </details>
 
 <footer>

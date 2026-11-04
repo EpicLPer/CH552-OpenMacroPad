@@ -53,18 +53,29 @@ static void code_unlock(void) {
   EA = 0;
   SAFE_MOD = 0x55;
   SAFE_MOD = 0xAA;
-  GLOBAL_CFG |= bCODE_WE;
+  // bCODE_WE is required for code flash. bDATA_WE is the bit data-flash
+  // writes use; set both, matching the parts that have been programmed.
+  GLOBAL_CFG |= bCODE_WE | bDATA_WE;
   SAFE_MOD = 0x00;
 }
 
 static void code_lock(void) {
   SAFE_MOD = 0x55;
   SAFE_MOD = 0xAA;
-  GLOBAL_CFG &= ~bCODE_WE;
+  GLOBAL_CFG &= ~(bCODE_WE | bDATA_WE);
   SAFE_MOD = 0x00;
   // Leave EA where the caller put it. Commit keeps interrupts off: the reset
   // vector is erased for the duration, so the USB interrupt must not run.
   if(!iap_allow_low) EA = 1;
+}
+
+// Status is meaningful after ROM_CTRL, not before. bROM_ADDR_OK resets to 0,
+// and returning early on that bit skips the command entirely. The 1.2.0
+// writer did that, so every browser update failed before a byte was stored.
+static uint8_t rom_done(uint8_t status) {
+  if(status & bROM_CMD_ERR) return 0;
+  if(!(status & bROM_ADDR_OK)) return 0;
+  return 1;
 }
 
 static uint8_t flag_read(void) {
@@ -102,29 +113,39 @@ static uint8_t page_ok(uint16_t addr) {
 }
 
 static uint8_t erase_page(uint16_t addr) {
+  uint8_t status;
   if(!page_ok(addr)) return 0;
   code_unlock();
+  E_DIS = 1;
   ROM_ADDR = addr;
-  if(!(ROM_STATUS & bROM_ADDR_OK)) { code_lock(); return 0; }
   ROM_CTRL = ROM_CMD_ERASE;
+  status = ROM_STATUS;
+  E_DIS = 0;
   code_lock();
-  if(ROM_STATUS & bROM_CMD_ERR) return 0;
-  return read_code(addr) == 0xFF;
+  // 0xA6 is the block erase used by this family. A part that rejects it sets
+  // bROM_CMD_ERR; the caller can still try word programming, which is how
+  // CH551-CH554 application writes are usually done.
+  if(status & bROM_CMD_ERR) return 2;
+  if(!rom_done(status)) return 0;
+  return read_code(addr) == 0xFF ? 1 : 0;
 }
 
 static uint8_t write_word(uint16_t addr, uint8_t lo, uint8_t hi) {
+  uint8_t status;
   if(addr & 1) return 0;
   if(addr < IAP_PAGE && !iap_allow_low) return 0;
   if(!iap_allow_low && addr >= IAP_APP_MAX && addr < IAP_STAGING) return 0;
   if(addr >= IAP_RESIDENT) return 0;
   code_unlock();
+  E_DIS = 1;
   ROM_ADDR = addr;
   ROM_DATA_L = lo;
   ROM_DATA_H = hi;
-  if(!(ROM_STATUS & bROM_ADDR_OK)) { code_lock(); return 0; }
   ROM_CTRL = ROM_CMD_WRITE;
+  status = ROM_STATUS;
+  E_DIS = 0;
   code_lock();
-  if(ROM_STATUS & bROM_CMD_ERR) return 0;
+  if(!rom_done(status)) return 0;
   return read_code(addr) == lo && read_code(addr + 1) == hi;
 }
 
@@ -137,11 +158,12 @@ static uint8_t program_byte(uint16_t addr, uint8_t value) {
   if(addr >= IAP_PAGE) {
     page = (uint8_t)(addr >> 10);
     if(!(iap_erased & (1 << page))) {
+      uint8_t erased = erase_page((uint16_t)page << 10);
+      if(erased != 1) return 0;
       if(!iap_dirty) {
         if(!flag_write(IAP_FLAG_DIRTY)) return 0;
         iap_dirty = 1;
       }
-      if(!erase_page((uint16_t)page << 10)) return 0;
       iap_erased |= (1 << page);
     }
   }
@@ -208,7 +230,7 @@ static uint8_t commit_page0(void) {
   uint16_t i;
   uint8_t lo, hi;
   iap_allow_low = 1;
-  if(!erase_page(0)) { iap_allow_low = 0; return 1; }
+  if(erase_page(0) != 1) { iap_allow_low = 0; return 0; }
   for(i = 0; i < IAP_PAGE; i += 2) {
     lo = read_code(IAP_STAGING + i);
     hi = read_code(IAP_STAGING + i + 1);
@@ -246,6 +268,9 @@ static void session(void) {
       }
       if(!erase_page(IAP_STAGING)) {
         reply(cmd, ST_WRITE_FAIL, 0);
+        // No application page has been erased. Drop back to the configurator
+        // instead of answering every later report from this loop.
+        if(!iap_dirty) { iap_mode = 0; return; }
         continue;
       }
       iap_len = off;
@@ -324,6 +349,7 @@ static void session(void) {
     }
     if(st == ST_OK) iap_last = off;
     reply(cmd, st, iap_off);
+    if(st != ST_OK && !iap_dirty) { iap_mode = 0; return; }
   }
 }
 

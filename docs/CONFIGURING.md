@@ -7,10 +7,11 @@ Chrome or Edge (double-click the file, or use File → Open). Click **Connect
 pad**. Nothing else has to be running. Firefox and Safari have no WebHID, so
 the page stops there.
 
-A pad that is not yet on firmware 1.2.0 cannot be updated from the page. That
-one-time install is still `python tools/chflash.py` with the full
-`firmware/prebuilt/padfw-1.2.1.bin`. After 1.2.0, later firmware updates are
-the `.web.bin` in the Firmware section of the same page.
+A pad on 1.2.0 cannot be updated from the page: its writer refuses the flash
+command and then stops answering until the cable is unplugged. The install
+is `python tools/chflash.py` with the full
+`firmware/prebuilt/padfw-1.2.2.bin`. After the pad reports 1.2.2, later
+firmware updates are the `.web.bin` in the Firmware section.
 
 ## The configurator
 

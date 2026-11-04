@@ -27,8 +27,8 @@
       }, ms);
       function onReport(event) {
         if (event.reportId !== B.REPORT) return;
-        const view = event.data;
-        if (view.getUint8(0) !== cmd) return;
+    const view = event.data;
+    if (view.byteLength < 1 || view.getUint8(0) !== cmd) return;
         clearTimeout(timer);
         device.removeEventListener("inputreport", onReport);
         resolve(view);
@@ -59,9 +59,16 @@
   }
 
   async function readInfo() {
-    const view = await transact(B.CMD_GET_INFO, null, 1000);
+    let view = await transact(B.CMD_GET_INFO, null, 1000);
     if (view.getUint8(1) !== 0x50 || view.getUint8(2) !== 0x44) {
-      throw new Error("The pad answered, but it was not the configuration report.");
+      // 1.2.0 stays in the updater after a failed write and answers that
+      // instead of the keymap. Abort returns to the configurator when no
+      // application page was erased.
+      try { await transact(0x14, null, 800); } catch (err) { /* still wedged */ }
+      view = await transact(B.CMD_GET_INFO, null, 1000);
+    }
+    if (view.getUint8(1) !== 0x50 || view.getUint8(2) !== 0x44) {
+      throw new Error("The pad answered, but it was not the configuration report. Unplug it and plug it back in. If it does not come back as a keyboard, flash the full image with chflash.");
     }
     requireOk(view);
     const firmware = `${view.getUint8(7)}.${view.getUint8(8)}.${view.getUint8(9)}`;

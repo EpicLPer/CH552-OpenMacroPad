@@ -86,8 +86,8 @@ def test_page0_is_last() -> None:
 
 
 def test_built_images() -> None:
-    web = (ROOT / "firmware" / "prebuilt" / "padfw-1.2.1.web.bin").read_bytes()
-    full = (ROOT / "firmware" / "prebuilt" / "padfw-1.2.1.bin").read_bytes()
+    web = (ROOT / "firmware" / "prebuilt" / "padfw-1.2.2.web.bin").read_bytes()
+    full = (ROOT / "firmware" / "prebuilt" / "padfw-1.2.2.bin").read_bytes()
     check("web fits below staging", web == full[:len(web)] and len(web) <= APP_MAX, True)
     check("web has a reset page", len(web) >= PAGE, True)
     check("reset trampoline", web[:3], bytes((0x02, 0x24, 0x00)))

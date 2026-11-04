@@ -78,7 +78,7 @@ extern __xdata action_t Keymap[ACT_COUNT];
 // disturb stored keymaps.
 #define FW_VERSION_MAJOR 1
 #define FW_VERSION_MINOR 2
-#define FW_VERSION_PATCH 1
+#define FW_VERSION_PATCH 2
 
 #define CFG_REPORT_ID   3
 #define CFG_MAGIC0      'P'

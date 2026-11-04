@@ -7,6 +7,21 @@ The firmware version and the configuration storage format version are separate.
 A firmware update only discards stored bindings if the storage format changed,
 which is noted explicitly below when it happens.
 
+## 1.2.2
+
+Storage format is still 2. Bindings and the host setting are kept.
+
+- The in-app updater in 1.2.0 reads the flash status before the erase or
+  write command. That bit is clear until the command runs, so the command
+  is skipped and the pad answers "could not write flash". It then stays in
+  the updater and the next Connect is not a configuration report. Unplug
+  and plug back in; the keymap is unchanged. A browser update cannot
+  replace that writer. `chflash` the full `padfw-1.2.2.bin` (13376 bytes).
+- 1.2.2 issues the flash command, then reads the status. If the erase
+  command is rejected, it still tries a word write. A failed attempt that
+  has not erased an application page returns to the configurator.
+- The page header says Page 3. Update firmware stays disabled on 1.2.0.
+
 ## 1.2.1
 
 Storage format is still 2. Bindings and the host setting are kept.
@@ -60,7 +75,7 @@ layout setting.
 - The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
   interrupt table was only six bytes, so C startup sat on the USB vector, and
   the jump to the resident USB handler was written at `0x0040` instead of
-  `0x0043`. The current full image is `padfw-1.2.1.bin`. The matching
+  `0x0043`. The current full image is `padfw-1.2.2.bin`. The matching
   `.web.bin` is the one to send afterwards; the earlier 7962-byte file has
   the same broken vectors.
 

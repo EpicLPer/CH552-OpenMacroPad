@@ -155,7 +155,7 @@ function showHost(data) {
   el("matchHost").hidden = !data.supported;
   const note = el("hostNote");
   if (!data.supported) {
-    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.1.";
+    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.2.";
     note.className = "hint warn";
     return;
   }
@@ -636,7 +636,7 @@ el("boot").onclick = async () => {
     await HidPad.bootloader();
     el("device").textContent = "Not connected";
     el("device").className = "device";
-    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.1.bin --wait 30. A pad already on 1.2.0 updates from the Firmware section with padfw-1.2.1.web.bin.", "good");
+    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30.", "good");
   } catch (err) {
     say(err.message, "bad");
   }

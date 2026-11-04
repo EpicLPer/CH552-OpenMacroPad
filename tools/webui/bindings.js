@@ -316,8 +316,14 @@
   }
 
   function canUpdate(version) {
-    const [maj, min] = String(version || "0").split(".").map((n) => +n || 0);
-    return maj > 1 || (maj === 1 && min >= 2);
+    const parts = String(version || "0").split(".").map((n) => +n || 0);
+    const maj = parts[0];
+    const min = parts[1];
+    const pat = parts[2];
+    // 1.2.0 and 1.2.1 contain the writer, but it checks the flash status
+    // before the command and then keeps the vendor interface. A browser
+    // update cannot replace that writer. 1.2.2 is the first one that can.
+    return maj > 1 || (maj === 1 && min > 2) || (maj === 1 && min === 2 && pat >= 2);
   }
 
   function slotLabel(id) {
