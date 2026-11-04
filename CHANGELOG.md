@@ -58,7 +58,7 @@ layout setting.
 - The first prebuilt 1.2.0 image enumerated as an unrecognized device. Its
   interrupt table was only six bytes, so C startup sat on the USB vector, and
   the jump to the resident USB handler was written at `0x0040` instead of
-  `0x0043`. Reflash the rebuilt full `padfw-1.2.0.bin`. The matching
+  `0x0043`. The current full image is `padfw-1.2.1.bin`. The matching
   `.web.bin` is the one to send afterwards; the earlier 7962-byte file has
   the same broken vectors.
 
