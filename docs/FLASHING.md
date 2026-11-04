@@ -4,10 +4,16 @@ Open [`tools/webui/index.html`](../tools/webui/index.html) in Chrome or Edge
 and click **Connect**. The header shows Version 5. Firefox and Safari cannot
 connect.
 
+The firmware files are also attached separately on the
+[1.2.3 release](https://github.com/EpicLPer/CH552-OpenMacroPad/releases/tag/v1.2.3).
+`padfw-1.2.3.bin` is the full image. `padfw-1.2.3.web.bin` is the browser
+update. `padfw-1.2.3.hex` is the same full image in Intel hex.
+
 ## Already on 1.2.2 or newer
 
 1. Click **Connect**.
-2. Open **Firmware** and choose `firmware/prebuilt/padfw-1.2.3.web.bin` (8168 bytes).
+2. Open **Firmware** and choose `padfw-1.2.3.web.bin` (8168 bytes), from
+   `firmware/prebuilt/` or from the release.
 3. Click **Update** and leave the cable in until the pad reboots.
 
 ## Not yet able to update from the page

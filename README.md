@@ -87,6 +87,10 @@ an update from the page. The file is `firmware/prebuilt/padfw-1.2.3.bin`
 A pad already on 1.2.2 or newer updates from the Firmware section of the same
 page, with `firmware/prebuilt/padfw-1.2.3.web.bin` (8168 bytes).
 
+Both files are separate downloads on the
+[1.2.3 release](https://github.com/EpicLPer/CH552-OpenMacroPad/releases/tag/v1.2.3).
+The page itself is in this repository, under `tools/webui/`.
+
 ![The browser configurator](docs/img/webgui.png)
 
 ## Documentation
