@@ -3,103 +3,79 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Macropad configurator</title>
+<title>Macropad</title>
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
+<div class="shell">
 
 <header>
-  <div>
-    <h1>Macropad</h1>
-    <p class="tag">Twelve keys, two knobs. Click one, then say what it should do.</p>
-    <!-- Page version. Bump this when the HTML file itself changes.
-         It is not the firmware version the pad reports after Connect. -->
-    <p class="pagever">Page 3 <span>— the file you opened, not the firmware on the pad</span></p>
-  </div>
-    <button id="connect" class="primary" type="button">Connect pad</button>
-    <div id="device" class="device">Not connected</div>
+  <h1>Macropad</h1>
+  <span class="ver" id="pageVersion">Version 4</span>
+  <span class="grow"></span>
+  <button id="connect" class="primary" type="button">Connect</button>
+  <div id="device" class="device">Pad firmware —</div>
 </header>
 
-<div class="hostbar" id="hostbar" hidden>
-  <label>Keyboard
-    <select id="layout"></select>
-  </label>
-  <label>System
-    <select id="os"></select>
-  </label>
-  <button id="matchHost" class="ghost" type="button">Match this computer</button>
+<div class="hostbar" id="hostbar">
+  <label>Keyboard <select id="layout" disabled></select></label>
+  <label>System <select id="os" disabled></select></label>
+  <button id="matchHost" class="ghost" type="button" disabled>Match this computer</button>
   <span id="hostNote" class="hint"></span>
 </div>
 
 <main>
   <section class="stage">
     <div id="pad" class="pad-wrap"></div>
-    <p class="legend">Key 1 is the top-left key, the one held for the bootloader. Knobs are on the right: turn left, press, turn right.</p>
+    <p class="legend">Top and bottom knobs: left, press, right.</p>
   </section>
 
   <section class="panel editor">
-    <h2 id="editing">Select a key</h2>
+    <h2 id="editing">Key</h2>
     <div id="editor" hidden>
-      <label for="binding">Type or capture</label>
+      <label for="binding">Binding</label>
       <div class="bindrow">
         <input id="binding" type="text" autocomplete="off" spellcheck="false"
-               placeholder="a, @, ctrl+z, enter">
+               placeholder="@, ctrl+z, enter">
         <button id="capture" type="button">Capture</button>
       </div>
       <div id="mods" class="mods"></div>
-      <p class="hint">
-        A character is stored as that character, so @ and Ctrl+Z follow the
-        keyboard chosen above. Capture only hears keys the browser reports.
-        The Windows key often never arrives; type <code>win+e</code> or tick Win.
-      </p>
 
-      <label for="function">Media, mouse, keypad, system</label>
+      <label for="function">Other</label>
       <select id="function"></select>
       <div id="stepsRow" hidden>
-        <label for="steps">Steps per press</label>
+        <label for="steps">Steps</label>
         <input id="steps" type="number" min="1" max="127" value="1">
       </div>
       <div id="rawRow" hidden>
-        <label for="rawUsage">HID usage (1–119)</label>
+        <label for="rawUsage">Usage</label>
         <input id="rawUsage" type="number" min="1" max="119" value="100">
-        <p class="hint">Sends that key position and skips layout translation. <code>nonus_backslash</code> is usage 0x64.</p>
       </div>
 
-      <button id="clear" class="texty" type="button">Clear this key</button>
-      <div class="preview">Sends <strong id="preview">nothing</strong></div>
+      <button id="clear" class="texty" type="button">Clear</button>
+      <div class="preview"><strong id="preview">nothing</strong></div>
     </div>
-    <p id="editorEmpty" class="hint">Click a key or a side of a knob.</p>
+    <p id="editorEmpty" class="hint">Click a key or a knob.</p>
   </section>
 </main>
 
 <details class="firmware">
-  <summary>Firmware update</summary>
-  <p class="hint">
-    A pad on firmware 1.2.0 cannot update itself from this page. Its writer
-    rejects the flash command and then stops answering until the cable is
-    unplugged. The one-time install is
-    <code>python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30</code>
-    (13376 bytes): start that, then hold the top-left key or bridge J2 while
-    plugging in. Once the pad reports 1.2.2, later updates are
-    <code>padfw-1.2.2.web.bin</code> here.
-    Firefox and Safari have no WebHID; use Chrome or Edge.
-  </p>
+  <summary>Firmware</summary>
   <div class="update-row">
-    <button id="fwConnect" type="button">Connect pad</button>
     <input id="fwFile" type="file" accept=".bin,application/octet-stream">
-    <button id="fwGo" class="primary" type="button" disabled>Update firmware</button>
+    <button id="fwGo" class="primary" type="button" disabled>Update</button>
   </div>
   <progress id="fwProgress" max="1" value="0"></progress>
-  <p id="fwNote" class="hint">The header must say Page 3. A pad that says firmware 1.2.0 needs the full chflash above, not Update firmware.</p>
+  <p id="fwNote" class="hint">Choose the .web.bin file.</p>
 </details>
 
 <footer>
-  <button id="apply" class="primary" disabled>Apply to pad</button>
+  <button id="apply" class="primary" disabled>Apply</button>
   <button id="revert" disabled>Discard</button>
   <button id="reload">Reload</button>
-  <span class="spacer"></span>
-  <button id="save">Save profile</button>
-  <button id="load">Load profile</button>
+  <span class="grow"></span>
+  <button id="save">Save</button>
+  <button id="load">Load</button>
   <button id="defaults" class="danger">Defaults</button>
   <button id="boot" class="danger">Bootloader</button>
   <input id="file" type="file" accept="application/json" hidden>
@@ -107,6 +83,7 @@
 
 <div id="status" class="status"></div>
 
+</div>
 <script src="bindings.js"></script>
 <script src="hidpad.js"></script>
 <script src="app.js"></script>

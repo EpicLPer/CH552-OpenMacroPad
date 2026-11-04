@@ -20,7 +20,7 @@ Storage format is still 2. Bindings and the host setting are kept.
 - 1.2.2 issues the flash command, then reads the status. If the erase
   command is rejected, it still tries a word write. A failed attempt that
   has not erased an application page returns to the configurator.
-- The page header says Page 3. Update firmware stays disabled on 1.2.0.
+- The configurator header shows Version 4. Update firmware stays disabled on 1.2.0.
 
 ## 1.2.1
 

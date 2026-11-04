@@ -77,7 +77,7 @@ and the knobs handle volume and media playback.
    for that flash.
 2. **Open** [`tools/webui/index.html`](tools/webui/index.html) in Chrome or
    Edge, click **Connect pad**, set the layout and OS, and edit the keys.
-   The header says Page 3. Firefox and Safari cannot connect. See
+   The header shows Version 4. Firefox and Safari cannot connect. See
    [`docs/CONFIGURING.md`](docs/CONFIGURING.md).
 
 A pad on 1.2.2 takes later firmware from the Firmware section of that same

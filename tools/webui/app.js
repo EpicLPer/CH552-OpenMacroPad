@@ -15,18 +15,24 @@ const KEY_GEO = (() => {
     const i = n - 1;
     out.push({
       id: String(n),
-      x: 32 + (i % 4) * 112,
-      y: 36 + Math.floor(i / 4) * 96,
-      w: 100,
+      x: 36 + (i % 4) * 116,
+      y: 32 + Math.floor(i / 4) * 104,
+      w: 104,
       h: 80,
     });
   }
   return out;
 })();
 
+const KNOB_ROWS = [32, 240];
+const KNOB_X = 520;
+const ZONE_W = 100;
+const ZONE_H = 80;
+const ZONE_GAP = 12;
+
 const KNOBS = [
   {
-    name: "Top", cy: 76,
+    name: "Top", y: KNOB_ROWS[0],
     parts: [
       { id: "top-ccw", caption: "Left" },
       { id: "top-press", caption: "Press" },
@@ -34,7 +40,7 @@ const KNOBS = [
     ],
   },
   {
-    name: "Bottom", cy: 268,
+    name: "Bottom", y: KNOB_ROWS[1],
     parts: [
       { id: "bot-ccw", caption: "Left" },
       { id: "bot-press", caption: "Press" },
@@ -56,7 +62,7 @@ const MANUAL_GROUPS = [
   ["System", [
     ["printscreen", "Print Screen"], ["scrolllock", "Scroll Lock"],
     ["pause", "Pause"], ["menu", "Menu"], ["power", "Power"],
-    ["nonus_backslash", "Non-US \\ (HID 0x64)"],
+    ["nonus_backslash", "Non-US \\"],
   ]],
 ];
 
@@ -100,18 +106,22 @@ function blankSlots() {
   return slots;
 }
 
+function padFirmware(text) {
+  el("device").textContent = text ? `Pad firmware ${text}` : "Pad firmware —";
+}
+
 async function refresh() {
   if (!HidPad.opened()) {
-    el("device").textContent = "Not connected";
+    padFirmware("");
     el("device").className = "device";
     return;
   }
-  say("Reading the pad...");
+  say("Reading…");
   try {
     const data = await HidPad.readConfig();
     hostState = data;
     showHost(data);
-    el("device").textContent = `Connected — firmware ${data.firmware}, ${data.count} slots`;
+    padFirmware(data.firmware);
     el("device").className = "device good";
     adoptSlots(data.slots);
     if (!selected) selected = "1";
@@ -120,54 +130,53 @@ async function refresh() {
     showEditor();
     updateApply();
     if (globalThis.onPadConnected) globalThis.onPadConnected(data);
-    say("Ready.");
+    say("");
   } catch (err) {
-    el("device").textContent = "Not connected";
+    padFirmware("");
     el("device").className = "device bad";
     say(err.message, "bad");
   }
 }
 
 function showHost(data) {
-  const bar = el("hostbar");
-  bar.hidden = false;
+  fillHostOptions();
   const layout = el("layout");
   const os = el("os");
-  if (!layout.options.length) {
-    for (const id of PadBind.LAYOUTS) {
-      const o = document.createElement("option");
-      o.value = id;
-      o.textContent = PadBind.LAYOUT_LABELS[id];
-      layout.appendChild(o);
-    }
-    for (const id of PadBind.OS_NAMES) {
-      const o = document.createElement("option");
-      o.value = id;
-      o.textContent = PadBind.OS_LABELS[id];
-      os.appendChild(o);
-    }
-  }
   const host = data.host;
   layout.value = host.layout;
   os.value = host.os;
-  layout.disabled = !data.supported;
-  os.disabled = !data.supported;
-  el("matchHost").hidden = !data.supported;
+  const ready = !!data.supported;
+  layout.disabled = !ready;
+  os.disabled = !ready;
+  el("matchHost").disabled = !ready;
   const note = el("hostNote");
-  if (!data.supported) {
-    note.textContent = "This firmware still types for a US keyboard. The one-time chflash installs 1.2.2.";
+  if (!ready) {
+    note.textContent = "Update the firmware first.";
     note.className = "hint warn";
-    return;
-  }
-  if (!host.confirmed) {
-    note.textContent = "Not confirmed yet. Match this computer, or pick the keyboard yourself.";
+  } else if (!host.confirmed) {
+    note.textContent = "Choose the keyboard.";
     note.className = "hint warn";
-  } else if (host.os === "macos") {
-    note.textContent = "Apple's US, British, German or French input source. German Standard and British PC keep the Windows chords: set the OS to Windows for those.";
-    note.className = "hint";
   } else {
-    note.textContent = "Characters follow this keyboard.";
+    note.textContent = "";
     note.className = "hint";
+  }
+}
+
+function fillHostOptions() {
+  const layout = el("layout");
+  const os = el("os");
+  if (layout.options.length) return;
+  for (const id of PadBind.LAYOUTS) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = PadBind.LAYOUT_LABELS[id];
+    layout.appendChild(o);
+  }
+  for (const id of PadBind.OS_NAMES) {
+    const o = document.createElement("option");
+    o.value = id;
+    o.textContent = PadBind.OS_LABELS[id];
+    os.appendChild(o);
   }
 }
 
@@ -192,16 +201,16 @@ async function detectLayout() {
 }
 
 async function saveHost(layout, os) {
-  say("Saving the computer layout...");
+  say("Saving…");
   try {
     if (layout === "auto") {
       layout = await detectLayout();
       os = detectOs();
-      if (!layout) throw new Error("This page could not read the keyboard. Choose US, UK, German or French.");
+      if (!layout) throw new Error("Choose US, UK, German, or French.");
     }
     await HidPad.setHost(layout, os);
     await refresh();
-    say("The pad will type for that computer.", "good");
+    say("Saved.", "good");
   } catch (err) {
     say(err.message, "bad");
   }
@@ -237,12 +246,12 @@ function hitGroup(id, parent) {
 
 function drawPad() {
   const wrap = el("pad");
-  const root = svg("svg", { viewBox: "0 0 860 390", role: "group", "aria-label": "Macropad" });
-  svg("rect", { class: "pcb", x: 8, y: 8, width: 844, height: 374, rx: 22 }, root);
-  for (const [x, y] of [[24, 24], [820, 24], [24, 366], [820, 366]]) {
+  const root = svg("svg", { viewBox: "0 0 880 356", role: "group", "aria-label": "Macropad" });
+  svg("rect", { class: "pcb", x: 12, y: 12, width: 856, height: 332, rx: 22 }, root);
+  for (const [x, y] of [[28, 28], [852, 28], [28, 328], [852, 328]]) {
     svg("circle", { class: "hole", cx: x, cy: y, r: 5 }, root);
   }
-  const silk = svg("text", { class: "silk", x: 430, y: 368, "text-anchor": "middle" }, root);
+  const silk = svg("text", { class: "silk", x: 262, y: 338, "text-anchor": "middle" }, root);
   silk.textContent = "SY181P2R03003A";
 
   for (const key of KEY_GEO) {
@@ -262,20 +271,14 @@ function drawPad() {
   }
 
   for (const knob of KNOBS) {
-    const name = svg("text", { class: "knob-name", x: 560, y: knob.cy - 46 }, root);
-    name.textContent = knob.name;
-    const xs = [500, 616, 732];
     knob.parts.forEach((part, i) => {
       const g = hitGroup(part.id, root);
-      const x = xs[i];
-      const y = knob.cy - 32;
-      svg("rect", { class: "face", x, y, width: 108, height: 74, rx: 12 }, g);
-      if (part.caption === "Press") {
-        svg("circle", { class: "knob-mark", cx: x + 90, cy: y + 16, r: 8 }, g);
-      }
+      const x = KNOB_X + i * (ZONE_W + ZONE_GAP);
+      const y = knob.y;
+      svg("rect", { class: "face", x, y, width: ZONE_W, height: ZONE_H, rx: 12 }, g);
       const cap = svg("text", { class: "keynum", x: x + 8, y: y + 16 }, g);
       cap.textContent = part.caption;
-      const fo = svg("foreignObject", { x: x + 4, y: y + 22, width: 100, height: 48 }, g);
+      const fo = svg("foreignObject", { x: x + 6, y: y + 22, width: ZONE_W - 12, height: ZONE_H - 28 }, g);
       const div = document.createElement("div");
       div.setAttribute("xmlns", "http://www.w3.org/1999/xhtml");
       const text = face(staged.get(part.id));
@@ -312,9 +315,7 @@ function updateApply() {
   const dirty = [...staged].filter(([id, b]) => stored.has(id) && b !== stored.get(id).binding);
   el("apply").disabled = dirty.length === 0;
   el("revert").disabled = dirty.length === 0;
-  el("apply").textContent = dirty.length
-    ? `Apply ${dirty.length} change${dirty.length > 1 ? "s" : ""}`
-    : "Apply to pad";
+  el("apply").textContent = dirty.length ? `Apply ${dirty.length}` : "Apply";
 }
 
 function splitChord(binding) {
@@ -383,7 +384,7 @@ function buildPickers() {
 
   const fn = el("function");
   fn.replaceChildren();
-  addOption(fn, "", "Type a key instead");
+  addOption(fn, "", "—");
   const groups = MANUAL_GROUPS.concat(consumerGroups(), [
     ["Mouse buttons", options.mouseButtons.map((n) => [n, n.replaceAll("_", " ")])],
     ["Scroll and pointer", options.mouseDeltas.map((n) => [n, n.replaceAll("_", " ")])],
@@ -395,8 +396,8 @@ function buildPickers() {
     fn.appendChild(group);
   }
   const rawGroup = document.createElement("optgroup");
-  rawGroup.label = "Raw position";
-  addOption(rawGroup, "__raw__", "Custom HID usage…");
+  rawGroup.label = "Other";
+  addOption(rawGroup, "__raw__", "Usage number");
   fn.appendChild(rawGroup);
   el("rawUsage").max = options.rawMax;
 }
@@ -485,7 +486,7 @@ function commitText(text, { fromField = false } = {}) {
 function toggleMod(name) {
   const kind = bindingKind(staged.get(selected));
   if (kind === "con" || kind === "mouse" || kind === "delta") {
-    say("Modifiers belong on a key. Type ctrl+z, or pick a function below.");
+    say("Add the modifier to the binding. Example: ctrl+z.");
     return;
   }
   const text = el("binding").value.trim();
@@ -521,7 +522,7 @@ async function apply() {
   for (const [id, binding] of staged)
     if (stored.has(id) && binding !== stored.get(id).binding) changes[id] = binding;
 
-  say("Writing to the pad...");
+  say("Saving…");
   try {
     const slots = await HidPad.writeChanges(changes);
     adoptSlots(slots);
@@ -529,7 +530,7 @@ async function apply() {
     drawPad();
     showEditor();
     updateApply();
-    say("Stored on the pad. Bindings are kept when it is unplugged.", "good");
+    say("Saved.", "good");
   } catch (err) {
     say(err.message, "bad");
   }
@@ -548,7 +549,7 @@ function download() {
   a.download = "macropad-profile.json";
   a.click();
   URL.revokeObjectURL(url);
-  say("Profile saved.");
+  say("Saved.", "good");
 }
 
 async function upload(file) {
@@ -561,9 +562,9 @@ async function upload(file) {
     drawPad();
     showEditor();
     updateApply();
-    say("Profile loaded. Press Apply to store it on the pad.");
+    say("Loaded. Apply to keep it.", "good");
   } catch (err) {
-    say(`Could not read that profile: ${err.message}`, "bad");
+    say("Could not read that file.", "bad");
   }
 }
 
@@ -578,7 +579,7 @@ el("capture").onclick = () => {
   el("capture").textContent = capturing ? "Listening…" : "Capture";
   if (capturing) {
     el("binding").blur();
-    say("Press a key. If nothing happens, the browser did not see it — type the name or use the list.");
+    say("Press a key.");
   } else {
     say("Capture cancelled.");
   }
@@ -601,7 +602,7 @@ window.addEventListener("keydown", async (e) => {
     meta: e.metaKey,
     altgr: e.getModifierState("AltGraph"),
   });
-  if (!binding) return say("The browser did not report a key this page can store. Type it, or pick it from the list.", "bad");
+  if (!binding) return say("Type the binding, or pick it under Other.", "bad");
   commitText(binding);
   say(`Captured ${binding}.`, "good");
 });
@@ -614,7 +615,7 @@ el("revert").onclick = () => {
   drawPad();
   showEditor();
   updateApply();
-  say("Changes discarded.");
+  say("Discarded.");
 };
 el("defaults").onclick = async () => {
   if (!confirm("Replace every binding with the defaults?")) return;
@@ -631,12 +632,12 @@ el("defaults").onclick = async () => {
   }
 };
 el("boot").onclick = async () => {
-  if (!confirm("Reboot the pad into its bootloader for reflashing?")) return;
+  if (!confirm("Reboot into the bootloader?")) return;
   try {
     await HidPad.bootloader();
-    el("device").textContent = "Not connected";
+    padFirmware("");
     el("device").className = "device";
-    say("The pad is in the ROM bootloader for a few seconds. Flash the full image with: python tools/chflash.py firmware/prebuilt/padfw-1.2.2.bin --wait 30.", "good");
+    say("Bootloader. Run chflash now.");
   } catch (err) {
     say(err.message, "bad");
   }
@@ -647,7 +648,7 @@ el("file").onchange = (e) => { if (e.target.files[0]) upload(e.target.files[0]);
 
 async function connectOrRefresh() {
   if (!navigator.hid) {
-    throw new Error("This browser has no WebHID. Use Chrome or Edge.");
+    throw new Error("Use Chrome or Edge.");
   }
   if (!HidPad.opened()) await HidPad.connect();
   await refresh();
@@ -655,12 +656,13 @@ async function connectOrRefresh() {
 
 el("connect").onclick = () => {
   connectOrRefresh().catch((err) => {
-    el("device").textContent = "Not connected";
+    padFirmware("");
     el("device").className = "device bad";
     say(err.message, "bad");
   });
 };
 
+fillHostOptions();
 adoptSlots(blankSlots());
 selected = "1";
 options = PadBind.catalogue();
@@ -668,11 +670,11 @@ buildPickers();
 drawPad();
 showEditor();
 if (!navigator.hid) {
-  el("device").textContent = "This browser has no WebHID. Use Chrome or Edge.";
+  padFirmware("");
   el("device").className = "device bad";
   el("connect").disabled = true;
-  say("WebHID is missing. Chrome or Edge is required.", "bad");
+  say("Use Chrome or Edge.", "bad");
 } else {
-  el("device").textContent = "Not connected";
-  say("Click Connect pad. A pad that is not yet on firmware 1.2.0 still needs one chflash first.");
+  padFirmware("");
+  say("");
 }

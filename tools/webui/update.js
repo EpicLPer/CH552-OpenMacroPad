@@ -36,11 +36,7 @@ function crc32(bytes) {
 }
 
 function chflashMessage(version) {
-  return `This pad is firmware ${version}. The writer in 1.2.0 cannot program ` +
-    `code flash from the browser, and after Update it stops answering until ` +
-    `the cable is unplugged. Flash the full image once: python tools/chflash.py ` +
-    `${FULL_IMAGE} --wait 30 (${FULL_BYTES} bytes). Hold the top-left key, or ` +
-    `bridge J2, while plugging in. Later updates use the .web.bin from this page.`;
+  return `Pad firmware ${version}. Flash the full file once: python tools/chflash.py ${FULL_IMAGE} --wait 30`;
 }
 
 async function transact(cmd, extra, ms) {
@@ -72,7 +68,7 @@ function noteFirmware(data) {
     fw("fwGo").disabled = true;
     return;
   }
-  fwNote(image ? `${image.length} bytes ready to send.` : "Choose the .web.bin, then Update firmware.", "good");
+  fwNote(image ? `${image.length} bytes.` : "Choose the .web.bin file.", "good");
   fw("fwGo").disabled = !image;
 }
 
@@ -81,7 +77,7 @@ globalThis.onPadConnected = noteFirmware;
 async function runUpdate() {
   if (!image) return;
   if (!HidPad.opened()) {
-    fwNote("Click Connect pad first.", "warn");
+    fwNote("Connect the pad first.", "warn");
     return;
   }
   if (!padCanUpdate) {
@@ -93,14 +89,14 @@ async function runUpdate() {
   bar.max = image.length;
   bar.value = 0;
   if (image.length < 0x400 || image.length > 0x2000) {
-    fwNote(`Image is ${image.length} bytes. Choose padfw-1.2.2.web.bin, not the full recovery file.`, "bad");
+    fwNote("Use the .web.bin file, not the full .bin.", "bad");
     fw("fwGo").disabled = false;
     return;
   }
   const trampoline = image[0] === 0x02 && image[1] === 0x24 && image[2] === 0x00 &&
     image[0x43] === 0x02 && image[0x44] === 0x24 && image[0x45] === 0x03;
   if (!trampoline) {
-    fwNote("This file would not enumerate. Use padfw-1.2.2.web.bin (USB jump at offset 0x43), not an older copy or the full .bin.", "bad");
+    fwNote("That file cannot be used. Choose the .web.bin file.", "bad");
     fw("fwGo").disabled = false;
     return;
   }
@@ -115,7 +111,7 @@ async function runUpdate() {
   try {
     const started = await transact(CMD_BEGIN, begin, 3000);
     if (image.length > started.detail) {
-      throw new Error(`Image is ${image.length} bytes; this pad accepts ${started.detail}. Use the .web.bin file.`);
+      throw new Error("Use the .web.bin file.");
     }
     for (let off = 0; off < image.length; off += DATA) {
       const chunk = image.subarray(off, Math.min(image.length, off + DATA));
@@ -127,9 +123,9 @@ async function runUpdate() {
       bar.value = Math.min(image.length, off + DATA);
       fwNote(`Writing ${bar.value} / ${image.length}`, "");
     }
-    fwNote("Checking the image and restarting the pad…", "");
+    fwNote("Checking…", "");
     await transact(CMD_COMMIT, null, 5000);
-    fwNote("Update accepted. The pad is rebooting. Reconnect it to set the keyboard layout.", "good");
+    fwNote("Updated. Connect again.", "good");
   } catch (err) {
     if (err.reply && err.reply.status === 0) {
       fwNote(chflashMessage(padVersion || "1.0.0 or 1.1.0"), "warn");
@@ -140,17 +136,13 @@ async function runUpdate() {
   }
 }
 
-fw("fwConnect").onclick = () => {
-  const button = document.getElementById("connect");
-  if (button) button.click();
-};
 fw("fwFile").onchange = () => {
   const file = fw("fwFile").files[0];
   if (!file) return;
   file.arrayBuffer().then((buf) => {
     image = new Uint8Array(buf);
     if (HidPad.opened() && !padCanUpdate) {
-      fwNote(`${chflashMessage(padVersion || "1.0.0 or 1.1.0")} Selected ${file.name} (${image.length} bytes) stays on the computer.`, "warn");
+      fwNote(chflashMessage(padVersion || "older"), "warn");
     } else {
       fwNote(`${file.name}, ${image.length} bytes.`, "");
     }

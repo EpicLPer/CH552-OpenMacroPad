@@ -23,7 +23,7 @@
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         device.removeEventListener("inputreport", onReport);
-        reject(new Error("The pad did not answer. If it no longer shows up as a keyboard, use chflash with the full image."));
+        reject(new Error("The pad did not answer. Unplug it and plug it back in."));
       }, ms);
       function onReport(event) {
         if (event.reportId !== B.REPORT) return;
@@ -68,7 +68,7 @@
       view = await transact(B.CMD_GET_INFO, null, 1000);
     }
     if (view.getUint8(1) !== 0x50 || view.getUint8(2) !== 0x44) {
-      throw new Error("The pad answered, but it was not the configuration report. Unplug it and plug it back in. If it does not come back as a keyboard, flash the full image with chflash.");
+      throw new Error("Unplug the pad and plug it back in.");
     }
     requireOk(view);
     const firmware = `${view.getUint8(7)}.${view.getUint8(8)}.${view.getUint8(9)}`;
@@ -114,7 +114,7 @@
 
   async function connect() {
     if (!navigator.hid) {
-      throw new Error("This browser has no WebHID. Use Chrome or Edge.");
+      throw new Error("Use Chrome or Edge.");
     }
     const devices = await navigator.hid.requestDevice({
       filters: [{ vendorId: B.VID, productId: B.PID, usagePage: 0xFF00 }],

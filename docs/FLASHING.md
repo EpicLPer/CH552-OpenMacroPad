@@ -8,7 +8,7 @@ The CH552 bootloader is in ROM and cannot be erased. A bad flash is recoverable.
 
 ## Already on 1.2.2
 
-1. Open the page and click **Connect pad**. The header says Page 3.
+1. Open the page and click **Connect**. The version at the top is Version 4.
 2. Under **Firmware**, choose `firmware/prebuilt/padfw-1.2.2.web.bin`.
 3. Press **Update firmware** and leave the cable in until the pad reboots.
 
